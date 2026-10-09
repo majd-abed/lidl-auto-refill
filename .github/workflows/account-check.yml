@@ -42,4 +42,3 @@ jobs:
           DRY_RUN: ${{ ((github.event_name == 'workflow_dispatch' && inputs.activate_refill) || (github.event_name == 'schedule' && vars.REFILL_ENABLED == 'true')) && 'false' || 'true' }}
           REFILL_THRESHOLD_GB: '0.30'
           REFILL_COOLDOWN_SECONDS: '600'
-

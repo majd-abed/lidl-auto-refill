@@ -44,4 +44,3 @@ jobs:
           LIDL_TOKEN_STATE_KEY: ${{ secrets.LIDL_TOKEN_STATE_KEY }}
           LIDL_USERNAME: ${{ secrets.LIDL_USERNAME }}
           LIDL_PASSWORD: ${{ secrets.LIDL_PASSWORD }}
-
