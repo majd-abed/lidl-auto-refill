@@ -211,7 +211,7 @@ the temporary encrypted session was removed after validation.
 - A programmatic free-offer price/eligibility lookup, if the portal exposes one.
 - One controlled refill through this application's HTTP client, with both
   before/after reads, when the threshold is reached and a refill is intended.
-- Durable cloud storage for the encrypted session and refill coordination state.
+- Live Supabase configuration and validation of the implemented cloud state adapter.
 - Any naturally observed expired/revoked-refresh-token behavior.
 
 Follow [DEVTOOLS.md](DEVTOOLS.md). No further HAR is currently required for the

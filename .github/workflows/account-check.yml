@@ -1,0 +1,45 @@
+name: Account check
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+    inputs:
+      activate_refill:
+        description: 'Allow one free refill if allowance is at or below the threshold'
+        type: boolean
+        default: false
+
+concurrency:
+  group: lidl-auto-refill
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    # Scheduled jobs stay off until storage/authentication are validated.
+    if: github.event_name == 'workflow_dispatch' || vars.CLOUD_CHECKS_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - name: Read allowance and apply the configured safeguards
+        run: python app.py
+        env:
+          CLIENT_MODE: http
+          STATE_BACKEND: postgres
+          STATE_ACCOUNT_KEY: lidl-main
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_CA_CERT: ${{ secrets.DATABASE_CA_CERT }}
+          LIDL_TOKEN_STATE_KEY: ${{ secrets.LIDL_TOKEN_STATE_KEY }}
+          DRY_RUN: ${{ ((github.event_name == 'workflow_dispatch' && inputs.activate_refill) || (github.event_name == 'schedule' && vars.REFILL_ENABLED == 'true')) && 'false' || 'true' }}
+          REFILL_THRESHOLD_GB: '0.30'
+          REFILL_COOLDOWN_SECONDS: '600'
+

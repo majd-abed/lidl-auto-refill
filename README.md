@@ -18,7 +18,8 @@ allowance after an error response and never resends the mutation. See
 
 Session renewal has now also been captured and reproduced through ordinary
 HTTP. It issues new access/refresh tokens and reported a one-hour access-token
-lifetime. The newest token pair is encrypted and retained between local runs.
+lifetime. The newest token pair is encrypted and retained between local or
+PostgreSQL-backed runs.
 No additional HAR or browser automation is required for the captured flow.
 
 ## Run on Windows
@@ -118,12 +119,16 @@ the user's confirmation, rather than a programmatic live-price check.
 
 All configuration comes from environment variables. `.env.example` documents
 the settings and contains placeholders only; the application does **not**
-automatically load `.env`. Runtime dependencies are `requests` and
-`cryptography`; `pytest` is the test dependency.
+automatically load `.env`. Runtime dependencies are `requests`, `cryptography`,
+and `psycopg` for PostgreSQL; `pytest` is the test dependency.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `CLIENT_MODE` | `mock` | `mock` or the captured `http` client |
+| `STATE_BACKEND` | `sqlite` | Local SQLite, or `postgres` for hosted cloud jobs (HTTP mode) |
+| `DATABASE_URL` | unset | PostgreSQL URI; required for the cloud backend |
+| `DATABASE_CA_CERT` | unset | Optional server CA certificate as PEM text for verified TLS |
+| `STATE_ACCOUNT_KEY` | `default` | One stable key per cloud account; workflows use `lidl-main` |
 | `LIDL_ACCESS_TOKEN` | unset | Optional raw access token for a short run without renewal |
 | `LIDL_TOKEN_STATE_KEY` | unset | Fernet encryption key; enables renewable session storage |
 | `LIDL_TOKEN_STATE_PATH` | `.state/session.sqlite3` | Encrypted session; separate from refill state |
@@ -156,6 +161,10 @@ before the token request. If the server rotated tokens but the process crashed
 before saving them, later runs stop for a fresh login instead of replaying the
 possibly invalid refresh token. SQLite files require a local filesystem with
 reliable locking; they are not a distributed lock for separate cloud hosts.
+The PostgreSQL backend instead stores encrypted sessions and refill history
+in a private schema. Atomic conditional writes commit intent before network
+requests, protect token rotation across machines, and preserve pending state
+after runner loss. Remote database connections require verified TLS.
 
 `parse_data_allowance()` accepts decimal commas/dots, MB/GB, and whitespace
 including nonbreaking spaces. It rejects missing units, multiple numbers,
@@ -215,7 +224,7 @@ requires investigation; rerunning does not submit another refill.
 
 ## Validation
 
-- 157 tests passed, covering allowance parsing, cross-process refill claims/token renewal,
+- 175 tests passed in GitHub Actions, covering parsing, SQLite/PostgreSQL claims and renewal,
   committed markers surviving process crashes, encryption/key errors,
   HTTP/GraphQL/timeouts, and HTTP 500 after an applied refill.
 - An authenticated `CLIENT_MODE=http`, `DRY_RUN=true` execution on 9 October
@@ -228,24 +237,30 @@ requires investigation; rerunning does not submit another refill.
 
 ## Cloud and GitHub Actions
 
-`.github/workflows/refill.yml` currently supports manual `workflow_dispatch`
-only, running tests and a mock dry-run. Push **the contents of this project
-directory as the repository root**, so `.github/workflows` is at the root.
+The project is published at https://github.com/majd-abed/lidl-auto-refill.
+Follow [CLOUD_SETUP.md](CLOUD_SETUP.md) for Supabase secrets, one-time bootstrap,
+read-only cloud validation, and controlled activation of the schedule.
 
-Before enabling real five-minute execution, validate session renewal, perform
-one controlled refill through the application, and provide durable shared state.
-A hosted runner starts with a fresh local database; this SQLite adapter alone
-is insufficient there.
+- `refill.yml` runs tests (including real PostgreSQL integration) and a mock check.
+- `bootstrap-cloud.yml` performs an explicit, manual-only login into cloud storage.
+- `account-check.yml` supports manual checks and five-minute scheduling.
+  Scheduled jobs are skipped until `CLOUD_CHECKS_ENABLED=true`. Refills remain
+  disabled unless the manual input or scheduled `REFILL_ENABLED=true` is set.
+
+Hosted jobs use `STATE_BACKEND=postgres`, a stable `STATE_ACCOUNT_KEY`, and
+repository secrets for `DATABASE_URL` and `LIDL_TOKEN_STATE_KEY`. The newest
+encrypted tokens and refill history persist in PostgreSQL across fresh runners.
+SQLite remains available for one persistent local machine.
 
 Deployment options:
 
 - One cloud VM/container or self-hosted runner with a persistent local volume,
   where all invocations use the same session/refill files and encryption key.
   Avoid network-mounted SQLite; keep the session `.lock` file alongside it.
-- For hosted Actions/serverless jobs, add a durable database adapter with an
-  atomic conditional claim and persistent pending/confirmed records. Keep the
-  pending marker until verified; a short-lived distributed lock alone is not
-  enough. The provider and credentials can be chosen in Phase 6.
+- Hosted Actions/serverless jobs use the PostgreSQL adapter and its durable
+  atomic claims. Keep the pending marker until verified; a short-lived
+  distributed lock alone is insufficient. Supabase's Free plan is the selected
+  deployment option; other PostgreSQL providers can use the same adapter.
 
 The included concurrency group serializes these workflow runs and avoids
 cancelling an active run. It does not retain refill history or coordinate other
@@ -253,8 +268,9 @@ machines. GitHub caches/artifacts alone cannot safely replace the durable
 claim: a job may send a refill and crash before uploading state.
 [GitHub concurrency documentation](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency).
 
-Once those steps are complete, add `schedule` with cron `*/5 * * * *` alongside
-`workflow_dispatch` and pass authentication using `${{ secrets.NAME }}`.
+The account workflow declares cron `*/5 * * * *` alongside `workflow_dispatch`,
+with repository variables gating scheduled execution and refill permission.
+All credentials use `${{ secrets.NAME }}`.
 Scheduled Actions can be delayed or dropped and run from the default branch;
 checks must tolerate irregular intervals.
 [GitHub schedule documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule).
@@ -271,7 +287,7 @@ environment variables or GitHub Secrets, never in captured fixtures or docs.
 3. HTTP client, encrypted token renewal, and error-after-applied-refill tests implemented.
 4. Authenticated HTTP reads tested successfully with `DRY_RUN=true`.
 5. Perform and verify one controlled real refill.
-6. Configure durable cloud state, Secrets, and the five-minute workflow.
+6. Configure Supabase/Secrets, validate cloud reads, then activate the schedule.
 
 Playwright becomes a runtime dependency only if the captured HTTP flow cannot
 be reproduced reliably. Any future fallback must use the same durable claim,
