@@ -141,7 +141,7 @@ Create a GitHub **fine-grained personal access token** for resource owner
 `majd-abed`, repository access **Only select repositories → lidl-auto-refill**,
 and repository permission **Actions → Read and write**. Choose an expiration
 and renew the token before it expires. Save the token directly as repository
-secret `LIDL_DISPATCH_TOKEN`; never paste it in source, SQL, or chat.
+secret `DISPATCH_TOKEN`; never paste it in source, SQL, or chat.
 [Token instructions](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens).
 
 Run **Manage cloud timer → enable**. This stores the scoped token in encrypted

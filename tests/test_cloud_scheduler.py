@@ -18,13 +18,13 @@ def test_enable_missing_scoped_token_does_not_open_the_database(monkeypatch, cap
     monkeypatch.setenv("CLIENT_MODE", "http")
     monkeypatch.setenv("STATE_BACKEND", "postgres")
     monkeypatch.setenv("DATABASE_URL", "postgresql://example:private@localhost/postgres")
-    monkeypatch.delenv("LIDL_DISPATCH_TOKEN", raising=False)
+    monkeypatch.delenv("DISPATCH_TOKEN", raising=False)
     monkeypatch.setattr("sys.argv", ["cloud_scheduler.py", "enable"])
     database = Mock()
     monkeypatch.setattr(cloud_scheduler, "_Postgres", database)
     assert cloud_scheduler.main() == 1
     database.assert_not_called()
-    assert "LIDL_DISPATCH_TOKEN" in capsys.readouterr().out
+    assert "DISPATCH_TOKEN" in capsys.readouterr().out
 
 
 def test_status_excludes_response_body_and_authentication_data():

@@ -40,4 +40,4 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DATABASE_CA_CERT: ${{ secrets.DATABASE_CA_CERT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          LIDL_DISPATCH_TOKEN: ${{ inputs.action == 'enable' && secrets.LIDL_DISPATCH_TOKEN || '' }}
+          DISPATCH_TOKEN: ${{ inputs.action == 'enable' && secrets.DISPATCH_TOKEN || '' }}
