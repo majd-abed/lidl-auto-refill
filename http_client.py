@@ -7,7 +7,7 @@ from typing import Any
 import requests
 
 from authentication import request_tokens
-from session_store import SessionStore, SessionTokens
+from session_store import RenewableSessionStore, SessionTokens
 
 from lidl_client import (
     AuthenticationExpiredError, RefillRequestError, RequestTimeoutError,
@@ -110,7 +110,7 @@ def parse_api_allowance(data: object, *, now: datetime | None = None) -> float:
 
 
 class HttpLidlClient:
-    def __init__(self, access_token: str | None = None, timeout_seconds: float = 20.0, *, session_store: SessionStore | None = None) -> None:
+    def __init__(self, access_token: str | None = None, timeout_seconds: float = 20.0, *, session_store: RenewableSessionStore | None = None) -> None:
         self._token = access_token
         self._token_store = session_store
         self._timeout = timeout_seconds

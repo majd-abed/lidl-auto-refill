@@ -5,8 +5,11 @@ from dataclasses import dataclass
 import math
 from pathlib import Path
 import sqlite3
-from typing import Iterator
+from typing import Iterator, Protocol, TYPE_CHECKING
 from uuid import uuid4
+
+if TYPE_CHECKING:
+    from config import Config
 
 
 class StateStoreError(RuntimeError):
@@ -25,6 +28,19 @@ class RefillRecord:
 class ClaimResult:
     record: RefillRecord | None
     blocked_by: str | None = None
+
+
+class RefillStateStore(Protocol):
+    def get(self) -> RefillRecord | None: ...
+    def claim(self, before_gb: float, now: float, cooldown_seconds: int) -> ClaimResult: ...
+    def confirm(self, request_id: str) -> None: ...
+
+
+def create_state_store(config: "Config") -> RefillStateStore:
+    if config.state_backend == "postgres":
+        from postgres_store import PostgresStateStore
+        return PostgresStateStore(config.database_url, config.state_account_key, ca_cert=config.database_ca_cert)
+    return SQLiteStateStore(config.state_db_path)
 
 
 class SQLiteStateStore:

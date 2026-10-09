@@ -7,7 +7,7 @@ import time
 from config import Config, ConfigurationError
 from lidl_client import ClientNotConfiguredError, LidlClientError, create_client, safe_error_label
 from refill_logic import run_once
-from state_store import SQLiteStateStore, StateStoreError
+from state_store import StateStoreError, create_state_store
 from session_store import SessionStateError
 
 
@@ -31,7 +31,7 @@ def main() -> int:
         client = create_client(config)
         if config.client_mode == "mock":
             logger.warning("MOCK mode: no Lidl account is contacted; all allowance/refill results are simulated.")
-        result = run_once(client, config, SQLiteStateStore(config.state_db_path))
+        result = run_once(client, config, create_state_store(config))
         return result.exit_code
     except (ConfigurationError, StateStoreError, ClientNotConfiguredError) as error:
         logger.error("%s", error)

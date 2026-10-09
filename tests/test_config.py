@@ -40,6 +40,25 @@ def test_session_state_requires_a_separate_persistent_file(path):
         Config.from_env({"LIDL_TOKEN_STATE_PATH": path})
 
 
+def test_cloud_connection_is_read_from_environment_and_hidden_from_repr():
+    config = Config.from_env({"CLIENT_MODE": "http", "STATE_BACKEND": "postgres", "DATABASE_URL": "postgresql://test:private-password@database.example/test"})
+    assert config.state_backend == "postgres"
+    assert "private-password" not in repr(config)
+
+
+@pytest.mark.parametrize("changes", [
+    {"STATE_BACKEND": "unsupported"},
+    {"STATE_BACKEND": "postgres", "CLIENT_MODE": "http"},
+    {"STATE_BACKEND": "postgres", "CLIENT_MODE": "http", "DATABASE_URL": "private-invalid-url"},
+    {"STATE_BACKEND": "postgres", "DATABASE_URL": "postgresql://localhost/test"},
+    {"STATE_ACCOUNT_KEY": ""}, {"STATE_ACCOUNT_KEY": "contains spaces"},
+])
+def test_invalid_cloud_configuration_is_sanitized(changes):
+    with pytest.raises(ConfigurationError) as caught:
+        Config.from_env(changes)
+    assert "private-invalid-url" not in str(caught.value)
+
+
 @pytest.mark.parametrize(
     ("name", "value"),
     [("DRY_RUN", "yes"), ("CLIENT_MODE", "browser"), ("REFILL_THRESHOLD_GB", "NaN"),

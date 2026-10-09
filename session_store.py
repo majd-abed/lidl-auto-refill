@@ -9,11 +9,14 @@ import os
 from pathlib import Path
 import sqlite3
 import time
-from typing import Callable, Iterator
+from typing import Callable, Iterator, Protocol, TYPE_CHECKING
 
 from cryptography.fernet import Fernet, InvalidToken
 
 from lidl_client import AuthenticationExpiredError
+
+if TYPE_CHECKING:
+    from config import Config
 
 
 class SessionStateError(AuthenticationExpiredError):
@@ -38,12 +41,41 @@ class SessionTokens:
             raise SessionStateError("Invalid token expiration; sign in again.")
 
 
-class SessionStore:
-    def __init__(self, path: Path, key: str, *, lock_timeout: float = 40.0, clock: Callable[[], float] = time.time) -> None:
+class TokenCipher:
+    def __init__(self, key: str) -> None:
         try:
             self._cipher = Fernet(key.encode("ascii"))
         except (ValueError, UnicodeError):
             raise SessionStateError("LIDL_TOKEN_STATE_KEY must be a valid Fernet key.") from None
+
+    def encrypt(self, tokens: SessionTokens) -> bytes:
+        payload = {name: getattr(tokens, name) for name in SessionTokens.__dataclass_fields__}
+        return self._cipher.encrypt(json.dumps(payload, allow_nan=False).encode("utf-8"))
+
+    def decrypt(self, ciphertext: bytes) -> SessionTokens:
+        try:
+            return SessionTokens(**json.loads(self._cipher.decrypt(ciphertext)))
+        except (InvalidToken, ValueError, TypeError, UnicodeError):
+            raise SessionStateError("Unable to decrypt the session; check the encryption key or sign in again.") from None
+
+
+class RenewableSessionStore(Protocol):
+    def access_token(self, renew: Callable[[SessionTokens], SessionTokens], *, rejected_token: str | None = None) -> str: ...
+    def bootstrap(self, login: Callable[[], SessionTokens], *, replace: bool = False) -> None: ...
+
+
+def create_session_store(config: "Config") -> RenewableSessionStore:
+    if not config.token_state_key:
+        raise SessionStateError("Set LIDL_TOKEN_STATE_KEY before bootstrapping a renewable session.")
+    if config.state_backend == "postgres":
+        from postgres_store import PostgresSessionStore
+        return PostgresSessionStore(config.database_url, config.token_state_key, config.state_account_key, ca_cert=config.database_ca_cert, lock_timeout=config.http_timeout_seconds + 20)
+    return SessionStore(config.token_state_path, config.token_state_key, lock_timeout=config.http_timeout_seconds + 20)
+
+
+class SessionStore:
+    def __init__(self, path: Path, key: str, *, lock_timeout: float = 40.0, clock: Callable[[], float] = time.time) -> None:
+        self._codec = TokenCipher(key)
         self.path = Path(path)
         self._clock = clock
         self._lock_timeout = lock_timeout
@@ -95,14 +127,10 @@ class SessionStore:
                 connection.close()
 
     def _encode(self, tokens: SessionTokens) -> bytes:
-        payload = {name: getattr(tokens, name) for name in SessionTokens.__dataclass_fields__}
-        return self._cipher.encrypt(json.dumps(payload, allow_nan=False).encode("utf-8"))
+        return self._codec.encrypt(tokens)
 
     def _decode(self, ciphertext: bytes) -> SessionTokens:
-        try:
-            return SessionTokens(**json.loads(self._cipher.decrypt(ciphertext)))
-        except (InvalidToken, ValueError, TypeError, UnicodeError):
-            raise SessionStateError("Unable to decrypt the session; check the encryption key or sign in again.") from None
+        return self._codec.decrypt(ciphertext)
 
     def save(self, tokens: SessionTokens, *, replace: bool = False) -> None:
         """Bootstrap only; replacement requires an explicit new login."""

@@ -115,9 +115,11 @@ def create_client(config: Config) -> LidlClient:
     if config.client_mode == "http":
         from http_client import HttpLidlClient
         if config.token_state_key:
-            from session_store import SessionStore
-            store = SessionStore(config.token_state_path, config.token_state_key, lock_timeout=config.http_timeout_seconds + 20)
+            from session_store import create_session_store
+            store = create_session_store(config)
             return HttpLidlClient(timeout_seconds=config.http_timeout_seconds, session_store=store)
+        if config.state_backend == "postgres":
+            raise ClientNotConfiguredError("Cloud checks require LIDL_TOKEN_STATE_KEY and a bootstrapped renewable session.")
         if not config.access_token:
             raise ClientNotConfiguredError("Set LIDL_TOKEN_STATE_KEY after bootstrapping a session, or supply LIDL_ACCESS_TOKEN for one short run.")
         return HttpLidlClient(config.access_token, config.http_timeout_seconds)

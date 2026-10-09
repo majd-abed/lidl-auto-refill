@@ -5,6 +5,7 @@ import math
 import os
 from pathlib import Path
 from typing import Mapping
+from urllib.parse import urlsplit
 
 
 class ConfigurationError(ValueError):
@@ -28,6 +29,10 @@ class Config:
     token_state_key: str | None = field(default=None, repr=False)
     token_state_path: Path = Path(".state/session.sqlite3")
     http_timeout_seconds: float = 20.0
+    state_backend: str = "sqlite"
+    database_url: str | None = field(default=None, repr=False)
+    database_ca_cert: str | None = field(default=None, repr=False)
+    state_account_key: str = "default"
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> "Config":
@@ -75,6 +80,24 @@ class Config:
             raise ConfigurationError("LIDL_TOKEN_STATE_PATH must name a persistent SQLite file.")
         if Path(token_path).resolve() == Path(state_path).resolve():
             raise ConfigurationError("Session and refill state must use separate SQLite files.")
+        backend = env.get("STATE_BACKEND", "sqlite").strip().lower()
+        if backend not in {"sqlite", "postgres"}:
+            raise ConfigurationError("STATE_BACKEND must be sqlite or postgres.")
+        database_url = env.get("DATABASE_URL") or None
+        if backend == "postgres":
+            try:
+                parts = urlsplit(database_url or "")
+                valid = parts.scheme in {"postgresql", "postgres"} and bool(parts.hostname) and bool(parts.path.strip("/"))
+                _ = parts.port
+            except ValueError:
+                valid = False
+            if not valid:
+                raise ConfigurationError("DATABASE_URL must be a PostgreSQL connection URI for STATE_BACKEND=postgres.")
+            if mode != "http":
+                raise ConfigurationError("STATE_BACKEND=postgres requires CLIENT_MODE=http; use SQLite for mock experiments.")
+        account_key = env.get("STATE_ACCOUNT_KEY", "default")
+        if not 1 <= len(account_key) <= 64 or not all(char.isascii() and (char.isalnum() or char in "-_") for char in account_key):
+            raise ConfigurationError("STATE_ACCOUNT_KEY must contain 1-64 ASCII letters, digits, hyphens, or underscores.")
         return cls(
             client_mode=mode,
             dry_run=dry_run == "true",
@@ -91,4 +114,8 @@ class Config:
             token_state_key=env.get("LIDL_TOKEN_STATE_KEY") or None,
             token_state_path=Path(token_path),
             http_timeout_seconds=http_timeout,
+            state_backend=backend,
+            database_url=database_url,
+            database_ca_cert=env.get("DATABASE_CA_CERT") or None,
+            state_account_key=account_key,
         )

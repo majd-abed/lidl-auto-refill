@@ -9,7 +9,7 @@ import requests
 from authentication import discover_client, request_tokens
 from config import Config, ConfigurationError
 from lidl_client import LidlClientError, safe_error_label
-from session_store import SessionStateError, SessionStore
+from session_store import SessionStateError, SessionTokens, create_session_store
 
 
 def main() -> int:
@@ -24,13 +24,13 @@ def main() -> int:
         username, password = os.environ.get("LIDL_USERNAME"), os.environ.get("LIDL_PASSWORD")
         if not config.token_state_key or not username or not password:
             raise ConfigurationError("Set LIDL_TOKEN_STATE_KEY, LIDL_USERNAME, and LIDL_PASSWORD for the one-time login.")
-        store = SessionStore(config.token_state_path, config.token_state_key, lock_timeout=config.http_timeout_seconds + 20)
+        store = create_session_store(config)
         client_id, client_secret = os.environ.get("LIDL_CLIENT_ID"), os.environ.get("LIDL_CLIENT_SECRET")
         if bool(client_id) != bool(client_secret):
             raise ConfigurationError("Set both LIDL_CLIENT_ID and LIDL_CLIENT_SECRET, or leave both unset for portal discovery.")
         if not client_id:
             client_id, client_secret = discover_client(session, timeout=config.http_timeout_seconds)
-        def login():
+        def login() -> SessionTokens:
             return request_tokens(session, {
                 "grant_type": "password", "client_id": client_id, "client_secret": client_secret,
                 "username": username.replace("+", "").replace(" ", ""), "password": password,

@@ -8,7 +8,7 @@ from typing import Callable
 
 from config import Config
 from lidl_client import LidlClient, LidlClientError, UnexpectedResponseError, safe_error_label
-from state_store import SQLiteStateStore
+from state_store import RefillStateStore
 
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ def _read_remaining(client: LidlClient) -> float:
 def run_once(
     client: LidlClient,
     config: Config,
-    state: SQLiteStateStore,
+    state: RefillStateStore,
     *,
     clock: Callable[[], float] = time.time,
     sleep: Callable[[float], None] = time.sleep,
