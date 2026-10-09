@@ -18,7 +18,8 @@ jobs:
     timeout-minutes: 10
     services:
       postgres:
-        image: postgres:18
+        # Google's public Docker Hub cache avoids shared-runner pull quotas.
+        image: mirror.gcr.io/library/postgres:18
         env:
           POSTGRES_DB: lidl_tests
           POSTGRES_USER: lidl_test
