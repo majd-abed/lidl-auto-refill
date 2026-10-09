@@ -223,13 +223,23 @@ def test_postgres_public_api_role_cannot_read_or_modify_state(database):
             connection.execute(sql.SQL("DROP ROLE {}").format(sql.Identifier(role)))
 
 
-def test_postgres_connection_errors_never_echo_secrets(monkeypatch):
+@pytest.mark.parametrize("diagnostic, expected", [
+    ("private-database-password", "Cannot safely access cloud state"),
+    ("password authentication failed for private-database-password", "authentication failed"),
+    ("Tenant or user not found: private-database-password", "authentication failed"),
+    ("SSL error: certificate verify failed: private-database-password", "TLS certificate verification failed"),
+    ("could not translate host name private-database-password", "hostname could not be resolved"),
+    ("connection timeout expired: private-database-password", "connection timed out"),
+    ("permission denied for private-database-password", "permissions are insufficient"),
+])
+def test_postgres_connection_errors_never_echo_secrets(monkeypatch, diagnostic, expected):
     def fail(*args, **kwargs):
         assert kwargs["sslmode"] == "verify-full"
         assert kwargs["prepare_threshold"] is None
-        raise psycopg.OperationalError("private-database-password")
+        raise psycopg.OperationalError(diagnostic)
 
     monkeypatch.setattr(psycopg, "connect", fail)
     with pytest.raises(StateStoreError) as caught:
         PostgresStateStore("postgresql://test:private-database-password@database.example/test?sslmode=disable")
     assert "private-database-password" not in str(caught.value)
+    assert expected in str(caught.value)

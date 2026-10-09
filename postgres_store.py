@@ -14,6 +14,22 @@ from session_store import SessionStateError, SessionTokens, TokenCipher
 from state_store import ClaimResult, RefillRecord, StateStoreError
 
 
+def _cloud_error_message(error: psycopg.Error) -> str:
+    # Inspect private driver diagnostics, but expose only fixed recovery messages.
+    detail = str(error).lower()
+    if error.sqlstate in {"28000", "28P01"} or any(text in detail for text in ("password authentication failed", "tenant or user not found")):
+        return "Cloud state authentication failed. Check the database username and password in DATABASE_URL."
+    if any(text in detail for text in ("certificate verify failed", "root certificate file", "could not read root certificate")):
+        return "Cloud state TLS certificate verification failed. Set DATABASE_CA_CERT to the trusted Supabase root certificate."
+    if any(text in detail for text in ("could not translate host name", "name or service not known", "nodename nor servname")):
+        return "Cloud database hostname could not be resolved. Copy the complete Session pooler URI into DATABASE_URL."
+    if any(text in detail for text in ("timeout expired", "connection timed out")):
+        return "Cloud database connection timed out. Check Supabase project status, pooler port, and network access."
+    if error.sqlstate == "42501" or "permission denied" in detail:
+        return "Cloud state permissions are insufficient. Use the database owner login with access to the private schema."
+    return "Cannot safely access cloud state. Check database connectivity, permissions, and TLS certificate settings."
+
+
 class _Postgres:
     _error = StateStoreError
 
@@ -45,7 +61,9 @@ class _Postgres:
                     yield connection
                 finally:
                     connection.close()
-        except (psycopg.Error, ValueError, OSError):
+        except psycopg.Error as error:
+            raise self._error(_cloud_error_message(error)) from None
+        except (ValueError, OSError):
             raise self._error("Cannot safely access cloud state. Check database connectivity, permissions, and TLS certificate settings.") from None
 
     @staticmethod
