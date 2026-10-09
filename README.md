@@ -280,7 +280,7 @@ machines. GitHub caches/artifacts alone cannot safely replace the durable
 claim: a job may send a refill and crash before uploading state.
 [GitHub concurrency documentation](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency).
 
-The account workflow declares cron `*/5 * * * *` alongside `workflow_dispatch`,
+The account workflow declares cron `2-59/5 * * * *` alongside `workflow_dispatch`,
 with repository variables gating scheduled execution and refill permission.
 All credentials use `${{ secrets.NAME }}`.
 Scheduled Actions can be delayed or dropped and run from the default branch;
