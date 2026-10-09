@@ -16,7 +16,7 @@ JOB_COMMAND = "SELECT lidl_automation.dispatch_account_check();"
 
 def validate_dispatch_settings(token: str, repository: str) -> None:
     if not re.fullmatch(r"github_pat_[A-Za-z0-9_]+", token):
-        raise ConfigurationError("Save a fine-grained GitHub token as GITHUB_DISPATCH_TOKEN.")
+        raise ConfigurationError("Save a fine-grained GitHub token as LIDL_DISPATCH_TOKEN.")
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
         raise ConfigurationError("GITHUB_REPOSITORY must identify the owner and repository.")
 
@@ -70,7 +70,7 @@ def main() -> int:
         config = Config.from_env()
         if config.state_backend != "postgres":
             raise ConfigurationError("The cloud timer requires STATE_BACKEND=postgres.")
-        token, repository = os.environ.get("GITHUB_DISPATCH_TOKEN", ""), os.environ.get("GITHUB_REPOSITORY", "")
+        token, repository = os.environ.get("LIDL_DISPATCH_TOKEN", ""), os.environ.get("GITHUB_REPOSITORY", "")
         if action == "enable":
             validate_dispatch_settings(token, repository)
         store = _Postgres(config.database_url, config.state_account_key, config.database_ca_cert)
