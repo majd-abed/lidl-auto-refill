@@ -143,8 +143,8 @@ secret `DISPATCH_TOKEN`; never paste it in source, SQL, or chat.
 [Token instructions](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens).
 
 Run **Manage cloud timer → enable**. This stores the scoped token in encrypted
-Supabase Vault and activates `*/5 * * * *`. The token only starts Actions jobs
-in this repository; the normal account job does not receive it. Cron commands
+Supabase Vault and activates `*/5 * * * *`. The timer uses this token only to
+start Actions jobs in this repository; the normal account job does not receive it. Cron commands
 contain a private function call, and the transient HTTP request queue is denied
 to public/API roles. The account's encrypted Lidl tokens are unchanged.
 [Vault documentation](https://supabase.com/docs/guides/database/vault).

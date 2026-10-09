@@ -248,6 +248,8 @@ requires investigation; rerunning does not submit another refill.
   The native five-minute timer is enabled. Its first tick at 22:20 UTC on
   9 October (00:20 local time on 10 October) received HTTP 200 from GitHub,
   and the [automatic account check succeeded](https://github.com/majd-abed/lidl-auto-refill/actions/runs/37998625873), reading 0.790 GB above the threshold.
+  The next tick at 22:25 UTC also received HTTP 200, and its
+  [account check succeeded](https://github.com/majd-abed/lidl-auto-refill/actions/runs/37999089192) on the final workflow, reading 0.780 GB with live refill mode enabled.
 
 ## Cloud and GitHub Actions
 

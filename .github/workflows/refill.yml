@@ -48,8 +48,3 @@ jobs:
           MOCK_REMAINING_DATA: '0.20 GB'
           REFILL_THRESHOLD_GB: '0.30'
           STATE_DB_PATH: '${{ runner.temp }}/lidl-phase1/refill.sqlite3'
-
-# Phase 6: add schedule with cron '*/5 * * * *' after the controlled HTTP
-# refill and durable cloud state are validated. Local token renewal is tested.
-# Future live credentials must use GitHub Actions Secrets, for example:
-# LIDL_TOKEN_STATE_KEY: ${{ secrets.LIDL_TOKEN_STATE_KEY }}
