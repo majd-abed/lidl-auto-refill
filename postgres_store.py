@@ -86,6 +86,9 @@ class _Postgres:
         with self._database() as connection, connection.transaction():
             connection.execute("SET LOCAL statement_timeout = '20s'")
             connection.execute("SET LOCAL lock_timeout = '10s'")
+            # Serialize schema/RLS setup to avoid concurrent DDL lock upgrades.
+            # Transaction-scoped locks also work through transaction poolers.
+            connection.execute("SELECT pg_advisory_xact_lock(1818846316, 0)")
             connection.execute("CREATE SCHEMA IF NOT EXISTS lidl_automation")
             connection.execute("REVOKE ALL ON SCHEMA lidl_automation FROM PUBLIC")
             connection.execute("CREATE TABLE IF NOT EXISTS lidl_automation.refills (account_key TEXT PRIMARY KEY, request_id TEXT NOT NULL, requested_at DOUBLE PRECISION NOT NULL, before_gb DOUBLE PRECISION NOT NULL, status TEXT NOT NULL CHECK (status IN ('pending', 'confirmed')))")

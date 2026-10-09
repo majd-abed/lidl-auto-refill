@@ -38,9 +38,9 @@ def session_tokens(expiry=5000):
 
 
 def _claim_from_process(url, account, start, results):
-    store = PostgresStateStore(url, account)
     if not start.wait(timeout=15):
         raise RuntimeError("Concurrent test did not start.")
+    store = PostgresStateStore(url, account)
     result = store.claim(0.20, 1000, 600)
     results.put("claimed" if result.record else result.blocked_by)
 
@@ -110,9 +110,9 @@ def test_postgres_intent_is_committed_before_mutation_and_survives_crash(databas
 
 
 def _renew_from_process(url, account, key, start, calls, results):
-    store = PostgresSessionStore(url, key, account, clock=lambda: 1000, lock_timeout=5)
     if not start.wait(timeout=15):
         raise RuntimeError("Concurrent test did not start.")
+    store = PostgresSessionStore(url, key, account, clock=lambda: 1000, lock_timeout=5)
 
     def renew(tokens):
         calls.put("renewed")
