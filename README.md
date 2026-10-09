@@ -228,7 +228,7 @@ requires investigation; rerunning does not submit another refill.
 
 ## Validation
 
-- [181 tests passed in GitHub Actions](https://github.com/majd-abed/lidl-auto-refill/actions/runs/37993636398), covering parsing, SQLite/PostgreSQL claims and renewal,
+- [188 tests passed in GitHub Actions](https://github.com/majd-abed/lidl-auto-refill/actions/runs/37998021806), covering parsing, SQLite/PostgreSQL claims and renewal,
   committed markers surviving process crashes, encryption/key errors,
   HTTP/GraphQL/timeouts, and HTTP 500 after an applied refill.
 - An authenticated `CLIENT_MODE=http`, `DRY_RUN=true` execution on 9 October
@@ -244,6 +244,9 @@ requires investigation; rerunning does not submit another refill.
   on 9 October 2026 submitted one captured free offer. Lidl returned an error
   response, but read-only verification confirmed an allowance increase and
   committed the confirmed refill state. The mutation was not resubmitted.
+- [Supabase timer preparation succeeded](https://github.com/majd-abed/lidl-auto-refill/actions/runs/37997853452).
+  The native five-minute job is installed and inactive, awaiting its scoped
+  dispatch token. No automatic account check has been verified yet.
 
 ## Cloud and GitHub Actions
 
