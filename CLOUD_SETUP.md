@@ -6,6 +6,10 @@ Scheduled account jobs require the repository variable `CLOUD_CHECKS_ENABLED`.
 It starts unset, so scheduled jobs are skipped. Manual account checks default
 to dry-run.
 
+The deployed repository completed cloud reads and a controlled refill on
+9 October 2026. Both `CLOUD_CHECKS_ENABLED` and `REFILL_ENABLED` are now `true`.
+Removing `CLOUD_CHECKS_ENABLED` stops scheduled account and maintenance jobs.
+
 ## Create storage
 
 Create a **Free** Supabase project named `lidl-auto-refill` in a European region.

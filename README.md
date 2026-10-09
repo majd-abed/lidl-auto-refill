@@ -10,7 +10,8 @@ GraphQL read/mutation, one-time HTTP login, and encrypted renewable sessions.
 Login and renewal have passed live read-only tests. A controlled cloud run
 also requested one free refill and verified the allowance increase. The repository
 is public so its standard hosted runner jobs are free. Scheduled execution is
-controlled by the repository variables described below.
+enabled, with automatic free refills at or below 0.30 GB. Repository variables
+control how to stop checks or return them to dry-run.
 
 The HAR demonstrated that a refill can be applied even when its request returns
 HTTP 500 and the portal displays an error. The script therefore verifies the
@@ -292,15 +293,15 @@ debug files. The original HAR stays outside the project; a workspace-level
 `.gitignore` also excludes HAR files. Current access tokens belong in local
 environment variables or GitHub Secrets, never in captured fixtures or docs.
 
-## Next phases
+## Project progress
 
 2. Allowance, refill, and token renewal requests captured and documented.
 3. HTTP client, encrypted token renewal, and error-after-applied-refill tests implemented.
 4. Authenticated HTTP reads tested successfully with `DRY_RUN=true`.
 5. One controlled real refill completed and verified from a hosted runner.
 6. Supabase/Secrets configured, cloud reads validated, and the repository made
-   public for free standard runners. Enable the repository variables after
-   validation, as described in [CLOUD_SETUP.md](CLOUD_SETUP.md).
+   public for free standard runners. Five-minute checks and automatic free
+   refills are enabled. Stop controls are in [CLOUD_SETUP.md](CLOUD_SETUP.md).
 
 Playwright becomes a runtime dependency only if the captured HTTP flow cannot
 be reproduced reliably. Any future fallback must use the same durable claim,
