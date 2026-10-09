@@ -1,9 +1,6 @@
 name: Account check
 
 on:
-  schedule:
-    # Offset from the busiest start-of-hour minute; still every five minutes.
-    - cron: '2-59/5 * * * *'
   workflow_dispatch:
     inputs:
       activate_refill:
@@ -15,7 +12,7 @@ on:
         type: boolean
         default: false
 
-run-name: ${{ inputs.scheduled_check && 'Automatic account check (Supabase timer)' || github.event_name == 'schedule' && 'Automatic account check (GitHub timer)' || 'Manual account check' }}
+run-name: ${{ inputs.scheduled_check && 'Automatic account check (Supabase timer)' || 'Manual account check' }}
 
 concurrency:
   group: lidl-auto-refill
@@ -27,7 +24,7 @@ permissions:
 jobs:
   check:
     # Scheduled jobs stay off until storage/authentication are validated.
-    if: (github.event_name == 'workflow_dispatch' && !inputs.scheduled_check) || vars.CLOUD_CHECKS_ENABLED == 'true'
+    if: ${{ !inputs.scheduled_check || vars.CLOUD_CHECKS_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -46,6 +43,6 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DATABASE_CA_CERT: ${{ secrets.DATABASE_CA_CERT }}
           LIDL_TOKEN_STATE_KEY: ${{ secrets.LIDL_TOKEN_STATE_KEY }}
-          DRY_RUN: ${{ ((github.event_name == 'workflow_dispatch' && !inputs.scheduled_check && inputs.activate_refill) || ((github.event_name == 'schedule' || inputs.scheduled_check) && vars.REFILL_ENABLED == 'true')) && 'false' || 'true' }}
+          DRY_RUN: ${{ ((!inputs.scheduled_check && inputs.activate_refill) || (inputs.scheduled_check && vars.REFILL_ENABLED == 'true')) && 'false' || 'true' }}
           REFILL_THRESHOLD_GB: '0.30'
           REFILL_COOLDOWN_SECONDS: '600'

@@ -9,10 +9,10 @@ its captured action was the free +1 GB refill. The client uses the observed
 GraphQL read/mutation, one-time HTTP login, and encrypted renewable sessions.
 Login and renewal have passed live read-only tests. A controlled cloud run
 also requested one free refill and verified the allowance increase. The repository
-is public so its standard hosted runner jobs are free. The GitHub schedule has
-not yet delivered an automatic check. A Supabase timer is being prepared to
-trigger the same job every five minutes; activation requires a scoped GitHub
-dispatch token. Repository variables control checks and refill permission.
+is public so its standard hosted runner jobs are free. Supabase Cron triggers
+the hosted account job every five minutes. The first automatic run completed
+successfully on 10 October 2026 (Europe/Paris). Repository variables control
+checks and refill permission; the Supabase job can also be paused separately.
 
 The HAR demonstrated that a refill can be applied even when its request returns
 HTTP 500 and the portal displays an error. The script therefore verifies the
@@ -245,8 +245,9 @@ requires investigation; rerunning does not submit another refill.
   response, but read-only verification confirmed an allowance increase and
   committed the confirmed refill state. The mutation was not resubmitted.
 - [Supabase timer preparation succeeded](https://github.com/majd-abed/lidl-auto-refill/actions/runs/37997853452).
-  The native five-minute job is installed and inactive, awaiting its scoped
-  dispatch token. No automatic account check has been verified yet.
+  The native five-minute timer is enabled. Its first tick at 22:20 UTC on
+  9 October (00:20 local time on 10 October) received HTTP 200 from GitHub,
+  and the [automatic account check succeeded](https://github.com/majd-abed/lidl-auto-refill/actions/runs/37998625873), reading 0.790 GB above the threshold.
 
 ## Cloud and GitHub Actions
 
@@ -256,12 +257,9 @@ read-only cloud validation, and controlled activation of the schedule.
 
 - `refill.yml` runs tests (including real PostgreSQL integration) and a mock check.
 - `bootstrap-cloud.yml` performs an explicit, manual-only login into cloud storage.
-- `account-check.yml` supports manual checks and five-minute scheduling.
+- `account-check.yml` supports manual checks and checks dispatched by Supabase.
   Scheduled jobs are skipped until `CLOUD_CHECKS_ENABLED=true`. Refills remain
   disabled unless the manual input or scheduled `REFILL_ENABLED=true` is set.
-- `keepalive.yml` updates only `.github/automation-heartbeat.txt` twice a month
-  while scheduled checks are enabled, keeping the public repository active.
-  It receives no Lidl or database secrets.
 - `cloud-timer.yml` prepares, enables, pauses, or inspects the Supabase timer.
   New timers are inactive until explicitly enabled with a scoped dispatch token.
 
@@ -286,12 +284,12 @@ machines. GitHub caches/artifacts alone cannot safely replace the durable
 claim: a job may send a refill and crash before uploading state.
 [GitHub concurrency documentation](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency).
 
-The account workflow declares cron `2-59/5 * * * *` alongside `workflow_dispatch`,
-with repository variables gating scheduled execution and refill permission.
-All credentials use `${{ secrets.NAME }}`.
-Scheduled Actions can be delayed or dropped and run from the default branch;
-checks must tolerate irregular intervals.
-[GitHub schedule documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule).
+Supabase Cron uses `*/5 * * * *` to dispatch `account-check.yml` from `main`.
+Repository variables gate automatic execution and refill permission. GitHub
+runner queues and network outages can delay checks; safeguards tolerate
+irregular intervals. Credentials use `${{ secrets.NAME }}`. The scoped dispatch
+token is retained in Supabase Vault. There is no second GitHub cron timer.
+[Supabase Cron documentation](https://supabase.com/docs/guides/cron/quickstart).
 
 Never commit credentials, session cookies, token-bearing URLs, HAR files, or
 browser storage state. `.gitignore` covers `.env`, local state, captures, and
@@ -306,8 +304,8 @@ environment variables or GitHub Secrets, never in captured fixtures or docs.
 4. Authenticated HTTP reads tested successfully with `DRY_RUN=true`.
 5. One controlled real refill completed and verified from a hosted runner.
 6. Supabase/Secrets configured, cloud reads validated, and the repository made
-   public for free standard runners. Manual checks work; automatic scheduling
-   is awaiting verification. Timer setup and stop controls are in
+   public for free standard runners. The Supabase timer and its first automatic
+   account job are verified. Timer setup and stop controls are in
    [CLOUD_SETUP.md](CLOUD_SETUP.md).
 
 Playwright becomes a runtime dependency only if the captured HTTP flow cannot

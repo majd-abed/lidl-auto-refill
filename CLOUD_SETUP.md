@@ -8,7 +8,9 @@ to dry-run.
 
 The deployed repository completed cloud reads and a controlled refill on
 9 October 2026. Both `CLOUD_CHECKS_ENABLED` and `REFILL_ENABLED` are now `true`.
-Removing `CLOUD_CHECKS_ENABLED` stops scheduled account and maintenance jobs.
+The Supabase five-minute timer is enabled and its first account job succeeded.
+Removing `CLOUD_CHECKS_ENABLED` skips automatic account jobs; pause the timer
+separately to stop its dispatch requests.
 
 ## Create storage
 
@@ -95,24 +97,21 @@ After the controlled refill is confirmed, create repository variables:
 | `CLOUD_CHECKS_ENABLED` | `true` | Run account checks approximately every five minutes |
 | `REFILL_ENABLED` | `true` | Allow scheduled free refills under the safeguards |
 
-Setting only `CLOUD_CHECKS_ENABLED=true` enables scheduled dry-runs. Removing
-it stops scheduled jobs. Removing `REFILL_ENABLED` returns scheduled checks to
-dry-run. Manual checks stay dry-run unless their input is enabled.
+Setting only `CLOUD_CHECKS_ENABLED=true` enables automatic dry-runs. Removing
+it skips automatic account jobs. Removing `REFILL_ENABLED` returns automatic
+checks to dry-run. Manual checks stay dry-run unless their input is enabled.
 
-GitHub schedules are approximate. Private-repository Actions use the account's
+GitHub runner queues can delay checks. Private-repository Actions use the account's
 included runner minutes or paid usage. Five-minute scheduling corresponds to
 approximately 8,640 runs in a 30-day month; check usage before sustained
 deployment. [GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions).
 
 This repository is public, so standard hosted runners are free. Workflow logs,
 including allowance readings, are public; credentials remain in Secrets and
-tokens remain encrypted in the private database. GitHub disables public
-schedules after 60 days without repository activity. `keepalive.yml` makes a
-small timestamp-only commit on the 1st and 15th while scheduled checks are
-enabled, keeping the repository active. It has contents-write permission but
-receives no account or database secrets. Removing `CLOUD_CHECKS_ENABLED` stops
-its scheduled jobs as well.
-[GitHub schedule rules](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule).
+tokens remain encrypted in the private database. Account jobs use API dispatch
+from Supabase Cron, so the GitHub public-repository cron inactivity rule does
+not apply to this timer. No maintenance commits or contents-write workflow
+permission are needed.
 
 Supabase's Free plan currently includes 500 MB of database storage, supports
 two active projects, and pauses projects after a week of inactivity.
@@ -127,10 +126,9 @@ Supabase storage and account-check jobs.
 
 ## Supabase timer
 
-The GitHub cron has not produced an automatic run despite an active workflow
-and enabled gates. Supabase Cron can trigger the same hosted job every five
-minutes without depending on GitHub's cron dispatcher. The job still starts
-when a GitHub runner becomes available.
+Supabase Cron triggers the hosted job every five minutes. The first timer
+tick and its account job were verified on 10 October 2026 (Europe/Paris).
+The job starts when a GitHub runner becomes available.
 [Supabase Cron](https://supabase.com/docs/guides/cron/quickstart).
 
 Run **Manage cloud timer** with action **prepare**. This installs `pg_cron` and
@@ -155,7 +153,7 @@ Automatic runs appear as **Automatic account check (Supabase timer)** in
 GitHub Actions. They respect `CLOUD_CHECKS_ENABLED` and `REFILL_ENABLED`, including
 when someone supplies the manual refill override alongside `scheduled_check`.
 An ordinary manual run stays dry-run unless **Allow one free refill** is enabled.
-Disable the GitHub cron after the Supabase timer is verified to avoid two timers.
+The GitHub cron was removed after the Supabase timer was verified, leaving one timer.
 
 View **Supabase → Integrations → Cron → lidl-account-check → History** to see
 timer ticks. A successful tick means the HTTP request was queued; it does not
