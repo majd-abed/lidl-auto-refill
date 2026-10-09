@@ -42,5 +42,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DATABASE_CA_CERT: ${{ secrets.DATABASE_CA_CERT }}
           LIDL_TOKEN_STATE_KEY: ${{ secrets.LIDL_TOKEN_STATE_KEY }}
+          LIDL_CLIENT_ID: ${{ secrets.LIDL_CLIENT_ID }}
+          LIDL_CLIENT_SECRET: ${{ secrets.LIDL_CLIENT_SECRET }}
           LIDL_USERNAME: ${{ secrets.LIDL_USERNAME }}
           LIDL_PASSWORD: ${{ secrets.LIDL_PASSWORD }}

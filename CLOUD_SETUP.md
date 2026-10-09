@@ -50,6 +50,12 @@ Transfer the key securely to the repository secret of the same name. Supply
 **Bootstrap cloud session** manually. This never requests a refill. A normal
 CAPTCHA/SMS challenge stops setup for user completion.
 
+If the hosted runner receives HTTP 403 while fetching the public portal page,
+set both `LIDL_CLIENT_ID` and `LIDL_CLIENT_SECRET` from the portal's published
+client configuration. This skips only the public settings fetch. The normal
+password grant and any authentication challenge still apply. These shared
+client settings are included in the encrypted session for future renewals.
+
 After success, delete the username/password repository secrets. Regular checks
 use the encrypted token pair, database URI, and encryption key. For an
 interrupted/revoked session, run bootstrap again with temporary login secrets
