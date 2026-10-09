@@ -7,8 +7,10 @@ Python 3.12+ project for checking remaining data and requesting at most one free
 and dry-run remain the defaults.** The user supplied a HAR and confirmed that
 its captured action was the free +1 GB refill. The client uses the observed
 GraphQL read/mutation, one-time HTTP login, and encrypted renewable sessions.
-Login and renewal have passed live read-only tests. The script's
-real mutation still needs a controlled integration test before live scheduling.
+Login and renewal have passed live read-only tests. A controlled cloud run
+also requested one free refill and verified the allowance increase. The repository
+is public so its standard hosted runner jobs are free. Scheduled execution is
+controlled by the repository variables described below.
 
 The HAR demonstrated that a refill can be applied even when its request returns
 HTTP 500 and the portal displays an error. The script therefore verifies the
@@ -224,7 +226,7 @@ requires investigation; rerunning does not submit another refill.
 
 ## Validation
 
-- 175 tests passed in GitHub Actions, covering parsing, SQLite/PostgreSQL claims and renewal,
+- [181 tests passed in GitHub Actions](https://github.com/majd-abed/lidl-auto-refill/actions/runs/37993636398), covering parsing, SQLite/PostgreSQL claims and renewal,
   committed markers surviving process crashes, encryption/key errors,
   HTTP/GraphQL/timeouts, and HTTP 500 after an applied refill.
 - An authenticated `CLIENT_MODE=http`, `DRY_RUN=true` execution on 9 October
@@ -232,8 +234,14 @@ requires investigation; rerunning does not submit another refill.
 - One-time Python HTTP login, token renewal, and a second process reusing the
   encrypted session were validated with live dry-runs. Both token values rotated
   on renewal, the restart reused them, and no refill record was created.
-- The application's real refill mutation still needs a controlled test when a
-  refill is appropriate; the supplied HAR documents the user's separate click.
+- A hosted runner completed normal API login and saved the encrypted session
+  in Supabase. Temporary username/password repository secrets were removed.
+- Two fresh hosted runners completed read-only allowance checks before and
+  after the controlled refill, reusing the encrypted cloud session.
+- A [controlled hosted refill](https://github.com/majd-abed/lidl-auto-refill/actions/runs/37994167864)
+  on 9 October 2026 submitted one captured free offer. Lidl returned an error
+  response, but read-only verification confirmed an allowance increase and
+  committed the confirmed refill state. The mutation was not resubmitted.
 
 ## Cloud and GitHub Actions
 
@@ -246,6 +254,9 @@ read-only cloud validation, and controlled activation of the schedule.
 - `account-check.yml` supports manual checks and five-minute scheduling.
   Scheduled jobs are skipped until `CLOUD_CHECKS_ENABLED=true`. Refills remain
   disabled unless the manual input or scheduled `REFILL_ENABLED=true` is set.
+- `keepalive.yml` updates only `.github/automation-heartbeat.txt` twice a month
+  while scheduled checks are enabled, keeping the public repository active.
+  It receives no Lidl or database secrets.
 
 Hosted jobs use `STATE_BACKEND=postgres`, a stable `STATE_ACCOUNT_KEY`, and
 repository secrets for `DATABASE_URL` and `LIDL_TOKEN_STATE_KEY`. The newest
@@ -286,8 +297,10 @@ environment variables or GitHub Secrets, never in captured fixtures or docs.
 2. Allowance, refill, and token renewal requests captured and documented.
 3. HTTP client, encrypted token renewal, and error-after-applied-refill tests implemented.
 4. Authenticated HTTP reads tested successfully with `DRY_RUN=true`.
-5. Perform and verify one controlled real refill.
-6. Configure Supabase/Secrets, validate cloud reads, then activate the schedule.
+5. One controlled real refill completed and verified from a hosted runner.
+6. Supabase/Secrets configured, cloud reads validated, and the repository made
+   public for free standard runners. Enable the repository variables after
+   validation, as described in [CLOUD_SETUP.md](CLOUD_SETUP.md).
 
 Playwright becomes a runtime dependency only if the captured HTTP flow cannot
 be reproduced reliably. Any future fallback must use the same durable claim,

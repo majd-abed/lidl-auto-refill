@@ -27,6 +27,10 @@ secret `DATABASE_CA_CERT`. The driver uses a temporary certificate file, then
 removes it after closing the connection.
 [Supabase SSL instructions](https://supabase.com/docs/guides/database/connecting-to-postgres#ssl).
 
+This repository's `DATABASE_CA_CERT` is configured with the production root
+certificate served by the Supabase dashboard. Its download URL is published
+in the [official dashboard configuration](https://github.com/supabase/supabase/blob/master/apps/studio/hooks/custom-content/custom-content.json).
+
 The database owner login creates a private `lidl_automation` schema and two
 tables. Keep this schema outside the exposed Data API schemas. Public schema
 privileges are revoked, and row level security has no API policies. The native
@@ -95,6 +99,16 @@ GitHub schedules are approximate. Private-repository Actions use the account's
 included runner minutes or paid usage. Five-minute scheduling corresponds to
 approximately 8,640 runs in a 30-day month; check usage before sustained
 deployment. [GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions).
+
+This repository is public, so standard hosted runners are free. Workflow logs,
+including allowance readings, are public; credentials remain in Secrets and
+tokens remain encrypted in the private database. GitHub disables public
+schedules after 60 days without repository activity. `keepalive.yml` makes a
+small timestamp-only commit on the 1st and 15th while scheduled checks are
+enabled, keeping the repository active. It has contents-write permission but
+receives no account or database secrets. Removing `CLOUD_CHECKS_ENABLED` stops
+its scheduled jobs as well.
+[GitHub schedule rules](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule).
 
 Supabase's Free plan currently includes 500 MB of database storage, supports
 two active projects, and pauses projects after a week of inactivity.
