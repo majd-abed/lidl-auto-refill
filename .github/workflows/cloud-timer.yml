@@ -1,0 +1,43 @@
+name: Manage cloud timer
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Prepare an inactive timer, enable it, pause it, or inspect status'
+        type: choice
+        options:
+          - status
+          - prepare
+          - enable
+          - pause
+        default: status
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lidl-cloud-timer
+  cancel-in-progress: false
+
+jobs:
+  timer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - name: Manage the Supabase timer
+        run: python cloud_scheduler.py "$TIMER_ACTION"
+        env:
+          TIMER_ACTION: ${{ inputs.action }}
+          CLIENT_MODE: http
+          STATE_BACKEND: postgres
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_CA_CERT: ${{ secrets.DATABASE_CA_CERT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_DISPATCH_TOKEN: ${{ inputs.action == 'enable' && secrets.GITHUB_DISPATCH_TOKEN || '' }}

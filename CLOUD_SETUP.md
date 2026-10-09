@@ -124,3 +124,47 @@ two active projects, and pauses projects after a week of inactivity.
 simultaneous refill claims/token rotation, runner loss, encrypted persistence,
 and denial of API-role reads/writes. The test database is independent of live
 Supabase storage and account-check jobs.
+
+## Supabase timer
+
+The GitHub cron has not produced an automatic run despite an active workflow
+and enabled gates. Supabase Cron can trigger the same hosted job every five
+minutes without depending on GitHub's cron dispatcher. The job still starts
+when a GitHub runner becomes available.
+[Supabase Cron](https://supabase.com/docs/guides/cron/quickstart).
+
+Run **Manage cloud timer** with action **prepare**. This installs `pg_cron` and
+`pg_net`, creates a private dispatch function, and creates an **inactive** job
+named `lidl-account-check`. It does not contact Lidl or send a GitHub request.
+
+Create a GitHub **fine-grained personal access token** for resource owner
+`majd-abed`, repository access **Only select repositories → lidl-auto-refill**,
+and repository permission **Actions → Read and write**. Choose an expiration
+and renew the token before it expires. Save the token directly as repository
+secret `GITHUB_DISPATCH_TOKEN`; never paste it in source, SQL, or chat.
+[Token instructions](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens).
+
+Run **Manage cloud timer → enable**. This stores the scoped token in encrypted
+Supabase Vault and activates `*/5 * * * *`. The token only starts Actions jobs
+in this repository; the normal account job does not receive it. Cron commands
+contain a private function call, and the transient HTTP request queue is denied
+to public/API roles. The account's encrypted Lidl tokens are unchanged.
+[Vault documentation](https://supabase.com/docs/guides/database/vault).
+
+Automatic runs appear as **Automatic account check (Supabase timer)** in
+GitHub Actions. They respect `CLOUD_CHECKS_ENABLED` and `REFILL_ENABLED`, including
+when someone supplies the manual refill override alongside `scheduled_check`.
+An ordinary manual run stays dry-run unless **Allow one free refill** is enabled.
+Disable the GitHub cron after the Supabase timer is verified to avoid two timers.
+
+View **Supabase → Integrations → Cron → lidl-account-check → History** to see
+timer ticks. A successful tick means the HTTP request was queued; it does not
+prove GitHub accepted or completed the account job. **Manage cloud timer → status**
+reports the last ticks, HTTP status codes, and accepted GitHub run IDs without
+printing request headers or response bodies. HTTP responses remain available
+for six hours, and this timer's dispatch/tick history is retained for seven days.
+
+To stop the timer, run **Manage cloud timer → pause**, or toggle the job inactive
+in Supabase Cron. Removing `CLOUD_CHECKS_ENABLED` skips automatic account jobs;
+the timer still sends dispatches until paused. Removing `REFILL_ENABLED` keeps
+checks running as dry-run. These controls never clear pending refill history.

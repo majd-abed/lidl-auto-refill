@@ -9,9 +9,10 @@ its captured action was the free +1 GB refill. The client uses the observed
 GraphQL read/mutation, one-time HTTP login, and encrypted renewable sessions.
 Login and renewal have passed live read-only tests. A controlled cloud run
 also requested one free refill and verified the allowance increase. The repository
-is public so its standard hosted runner jobs are free. Scheduled execution is
-enabled, with automatic free refills at or below 0.30 GB. Repository variables
-control how to stop checks or return them to dry-run.
+is public so its standard hosted runner jobs are free. The GitHub schedule has
+not yet delivered an automatic check. A Supabase timer is being prepared to
+trigger the same job every five minutes; activation requires a scoped GitHub
+dispatch token. Repository variables control checks and refill permission.
 
 The HAR demonstrated that a refill can be applied even when its request returns
 HTTP 500 and the portal displays an error. The script therefore verifies the
@@ -258,6 +259,8 @@ read-only cloud validation, and controlled activation of the schedule.
 - `keepalive.yml` updates only `.github/automation-heartbeat.txt` twice a month
   while scheduled checks are enabled, keeping the public repository active.
   It receives no Lidl or database secrets.
+- `cloud-timer.yml` prepares, enables, pauses, or inspects the Supabase timer.
+  New timers are inactive until explicitly enabled with a scoped dispatch token.
 
 Hosted jobs use `STATE_BACKEND=postgres`, a stable `STATE_ACCOUNT_KEY`, and
 repository secrets for `DATABASE_URL` and `LIDL_TOKEN_STATE_KEY`. The newest
@@ -300,8 +303,9 @@ environment variables or GitHub Secrets, never in captured fixtures or docs.
 4. Authenticated HTTP reads tested successfully with `DRY_RUN=true`.
 5. One controlled real refill completed and verified from a hosted runner.
 6. Supabase/Secrets configured, cloud reads validated, and the repository made
-   public for free standard runners. Five-minute checks and automatic free
-   refills are enabled. Stop controls are in [CLOUD_SETUP.md](CLOUD_SETUP.md).
+   public for free standard runners. Manual checks work; automatic scheduling
+   is awaiting verification. Timer setup and stop controls are in
+   [CLOUD_SETUP.md](CLOUD_SETUP.md).
 
 Playwright becomes a runtime dependency only if the captured HTTP flow cannot
 be reproduced reliably. Any future fallback must use the same durable claim,
