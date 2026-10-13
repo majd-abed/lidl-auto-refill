@@ -236,7 +236,7 @@ requires investigation; rerunning does not submit another refill.
 
 ## Validation
 
-- [188 tests passed in GitHub Actions](https://github.com/majd-abed/lidl-auto-refill/actions/runs/37998021806), covering parsing, SQLite/PostgreSQL claims and renewal,
+- [194 tests passed in GitHub Actions](https://github.com/majd-abed/lidl-auto-refill/actions/runs/38373405425), covering parsing, SQLite/PostgreSQL claims and renewal,
   committed markers surviving process crashes, encryption/key errors,
   HTTP/GraphQL/timeouts, and HTTP 500 after an applied refill.
 - An authenticated `CLIENT_MODE=http`, `DRY_RUN=true` execution on 9 October
@@ -259,6 +259,10 @@ requires investigation; rerunning does not submit another refill.
   and the [automatic account check succeeded](https://github.com/majd-abed/lidl-auto-refill/actions/runs/37998625873), reading 0.790 GB above the threshold.
   The next tick at 22:25 UTC also received HTTP 200, and its
   [account check succeeded](https://github.com/majd-abed/lidl-auto-refill/actions/runs/37999089192) on the final workflow, reading 0.780 GB with live refill mode enabled.
+- On 13 October, Lidl returned HTTP 503 during token renewal. A new normal
+  login restored the session, and a [hosted dry-run](https://github.com/majd-abed/lidl-auto-refill/actions/runs/38373413168)
+  read 0.680 GB. Interrupted renewals now receive one normal-login recovery;
+  failed recovery pauses the timer and preserves refill safety history.
 
 ## Cloud and GitHub Actions
 
