@@ -15,7 +15,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         bootstrap_from_environment(Config.from_env(), replace=args.replace)
-        print("Encrypted session saved. Remove LIDL_USERNAME and LIDL_PASSWORD from the environment before running app.py.")
+        print("Encrypted session saved. Healthy checks reuse tokens; credentials are used only for normal-login recovery.")
         return 0
     except ConfigurationError as error:
         print(f"Configuration error: {error}")
