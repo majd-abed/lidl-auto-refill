@@ -23,6 +23,10 @@ class SessionStateError(AuthenticationExpiredError):
     """Stop for a normal login when the stored session cannot be trusted."""
 
 
+class SessionRenewalInterrupted(SessionStateError):
+    """A previous renewal ended without retaining a usable replacement pair."""
+
+
 @dataclass(frozen=True, slots=True)
 class SessionTokens:
     access_token: str = field(repr=False)
@@ -165,7 +169,7 @@ class SessionStore:
             if row is None:
                 raise SessionStateError("No stored session. Run bootstrap_session.py once.")
             if row[1]:
-                raise SessionStateError("Token renewal was interrupted; run bootstrap_session.py --replace to sign in again.")
+                raise SessionRenewalInterrupted("Token renewal was interrupted; run bootstrap_session.py --replace to sign in again.")
             tokens = self._decode(row[0])
             if tokens.expires_at > self._clock() + 30 and (rejected_token is None or rejected_token != tokens.access_token):
                 return tokens.access_token

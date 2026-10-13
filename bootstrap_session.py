@@ -1,43 +1,20 @@
-"""Explicit one-time login. Passwords are never persisted or used by app.py."""
+"""Explicit normal sign-in; credentials come from the environment only."""
 
 import argparse
-import os
 import sqlite3
 
-import requests
-
-from authentication import discover_client, request_tokens
+from authentication import bootstrap_from_environment
 from config import Config, ConfigurationError
 from lidl_client import LidlClientError, safe_error_label
-from session_store import SessionStateError, SessionTokens, create_session_store
+from session_store import SessionStateError
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--replace", action="store_true", help="Replace an existing session after a new normal login.")
     args = parser.parse_args()
-    session = requests.Session()
-    session.trust_env = False
-    session.mount("https://", requests.adapters.HTTPAdapter(max_retries=0))
     try:
-        config = Config.from_env()
-        username, password = os.environ.get("LIDL_USERNAME"), os.environ.get("LIDL_PASSWORD")
-        if not config.token_state_key or not username or not password:
-            raise ConfigurationError("Set LIDL_TOKEN_STATE_KEY, LIDL_USERNAME, and LIDL_PASSWORD for the one-time login.")
-        store = create_session_store(config)
-        client_id, client_secret = os.environ.get("LIDL_CLIENT_ID"), os.environ.get("LIDL_CLIENT_SECRET")
-        if bool(client_id) != bool(client_secret):
-            raise ConfigurationError("Set both LIDL_CLIENT_ID and LIDL_CLIENT_SECRET, or leave both unset for portal discovery.")
-        if not client_id:
-            client_id, client_secret = discover_client(session, timeout=config.http_timeout_seconds)
-        def login() -> SessionTokens:
-            return request_tokens(session, {
-                "grant_type": "password", "client_id": client_id, "client_secret": client_secret,
-                "username": username.replace("+", "").replace(" ", ""), "password": password,
-                "captcha_code": "", "captcha_token": None,
-            }, timeout=config.http_timeout_seconds, client_id=client_id, client_secret=client_secret, login=True)
-
-        store.bootstrap(login, replace=args.replace)
+        bootstrap_from_environment(Config.from_env(), replace=args.replace)
         print("Encrypted session saved. Remove LIDL_USERNAME and LIDL_PASSWORD from the environment before running app.py.")
         return 0
     except ConfigurationError as error:
@@ -52,8 +29,6 @@ def main() -> int:
     except (sqlite3.Error, OSError):
         print("Unable to save session state. Check the local file path and permissions.")
         return 1
-    finally:
-        session.close()
 
 
 if __name__ == "__main__":

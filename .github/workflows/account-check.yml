@@ -43,6 +43,12 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DATABASE_CA_CERT: ${{ secrets.DATABASE_CA_CERT }}
           LIDL_TOKEN_STATE_KEY: ${{ secrets.LIDL_TOKEN_STATE_KEY }}
+          # Used only for one normal login after an interrupted renewal.
+          LIDL_USERNAME: ${{ secrets.LIDL_USERNAME }}
+          LIDL_PASSWORD: ${{ secrets.LIDL_PASSWORD }}
+          LIDL_CLIENT_ID: ${{ secrets.LIDL_CLIENT_ID }}
+          LIDL_CLIENT_SECRET: ${{ secrets.LIDL_CLIENT_SECRET }}
+          CLOUD_SCHEDULED_CHECK: ${{ inputs.scheduled_check && 'true' || 'false' }}
           DRY_RUN: ${{ ((!inputs.scheduled_check && inputs.activate_refill) || (inputs.scheduled_check && vars.REFILL_ENABLED == 'true')) && 'false' || 'true' }}
           REFILL_THRESHOLD_GB: '0.30'
           REFILL_COOLDOWN_SECONDS: '600'

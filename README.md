@@ -82,15 +82,21 @@ The bootstrap obtains published client settings from Lidl's current public
 portal JavaScript. It reads the file without executing it and stops if its
 location/configuration changes. `LIDL_CLIENT_ID` and `LIDL_CLIENT_SECRET` may
 override discovery, using environment variables only. The password is used
-for this explicit login and is never saved. CAPTCHA or SMS requirements stop
+only for a normal login and is never saved in application state. CAPTCHA or SMS requirements stop
 setup for normal user sign-in; the project does not bypass challenges.
 
 `app.py` renews shortly before access-token expiration. After a read returns
 HTTP 401 it may renew once and retry that **read** once. Refill requests are
 never replayed, including after HTTP 401. An expired/revoked refresh token or
-interrupted renewal requires `bootstrap_session.py --replace` with credentials
-supplied again. This replaces only the session; existing refill safety records
-remain intact.
+interrupted renewal requires a new normal login. When `LIDL_USERNAME` and
+`LIDL_PASSWORD` are available in the environment, the next check makes one
+coordinated normal login and replaces only the session. It never replays the
+uncertain refresh grant. Without those credentials, use
+`bootstrap_session.py --replace`. Existing refill safety records remain intact.
+If the single recovery attempt fails during an automatic cloud check, the
+Supabase timer is paused and the job reports an error instead of producing
+another failure notification every five minutes. Resolve the login/challenge,
+then enable the timer again.
 
 For a short run without renewable storage, supply a current raw access token.
 Leave `LIDL_TOKEN_STATE_KEY` unset in this mode. PowerShell can read the token
@@ -107,7 +113,8 @@ Remove-Item Env:\LIDL_ACCESS_TOKEN
 ```
 
 The HTTP client does not use browser cookies or a browser runtime. Password
-login is exclusive to `bootstrap_session.py`; regular checks reuse/renew tokens.
+login is used for bootstrap and one recovery after interrupted renewal;
+healthy regular checks reuse/renew tokens.
 Access-only mode stops when its supplied token expires.
 `LIDL_SESSION_TOKEN` is accepted as an alias for the
 raw access token, with `LIDL_ACCESS_TOKEN` taking precedence.
@@ -136,8 +143,9 @@ and `psycopg` for PostgreSQL; `pytest` is the test dependency.
 | `LIDL_ACCESS_TOKEN` | unset | Optional raw access token for a short run without renewal |
 | `LIDL_TOKEN_STATE_KEY` | unset | Fernet encryption key; enables renewable session storage |
 | `LIDL_TOKEN_STATE_PATH` | `.state/session.sqlite3` | Encrypted session; separate from refill state |
-| `LIDL_USERNAME`, `LIDL_PASSWORD` | unset | Explicit one-time bootstrap only |
+| `LIDL_USERNAME`, `LIDL_PASSWORD` | unset | Bootstrap and one normal-login recovery after interrupted renewal |
 | `LIDL_CLIENT_ID`, `LIDL_CLIENT_SECRET` | unset | Optional paired bootstrap override of published client settings |
+| `CLOUD_SCHEDULED_CHECK` | `false` | Hosted timer input; pauses Supabase after a failed normal-login recovery |
 | `HTTP_TIMEOUT_SECONDS` | `20` | Connect/read timeout, greater than 0 and at most 120 seconds |
 | `DRY_RUN` | `true` | Reads and reports; never sends a refill request or changes a refill record |
 | `REFILL_THRESHOLD_GB` | `0.30` | Refill when remaining GB is **at or below** this value |
@@ -162,7 +170,7 @@ and published client settings use authenticated [Fernet encryption](https://cryp
 Keep its key separate from the database and out of version control. OS file
 locks serialize renewals across processes; a durable pending marker is committed
 before the token request. If the server rotated tokens but the process crashed
-before saving them, later runs stop for a fresh login instead of replaying the
+before saving them, later runs require a fresh login instead of replaying the
 possibly invalid refresh token. SQLite files require a local filesystem with
 reliable locking; they are not a distributed lock for separate cloud hosts.
 The PostgreSQL backend instead stores encrypted sessions and refill history
@@ -237,7 +245,8 @@ requires investigation; rerunning does not submit another refill.
   encrypted session were validated with live dry-runs. Both token values rotated
   on renewal, the restart reused them, and no refill record was created.
 - A hosted runner completed normal API login and saved the encrypted session
-  in Supabase. Temporary username/password repository secrets were removed.
+  in Supabase. Login credentials are now retained only in encrypted GitHub
+  Secrets for bounded recovery after an interrupted renewal.
 - Two fresh hosted runners completed read-only allowance checks before and
   after the controlled refill, reusing the encrypted cloud session.
 - A [controlled hosted refill](https://github.com/majd-abed/lidl-auto-refill/actions/runs/37994167864)

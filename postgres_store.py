@@ -10,7 +10,7 @@ from uuid import uuid4
 import psycopg
 from psycopg.conninfo import conninfo_to_dict
 
-from session_store import SessionStateError, SessionTokens, TokenCipher
+from session_store import SessionRenewalInterrupted, SessionStateError, SessionTokens, TokenCipher
 from state_store import ClaimResult, RefillRecord, StateStoreError
 
 
@@ -184,7 +184,9 @@ class PostgresSessionStore(_Postgres):
                     raise SessionStateError("No stored cloud session. Run bootstrap_session.py once.")
                 ciphertext, renewal_id, started_at = row
                 if renewal_id is not None:
-                    if not isinstance(started_at, (int, float)) or not math.isfinite(started_at) or self._clock() >= started_at + self._lock_timeout or time.monotonic() >= deadline:
+                    if isinstance(started_at, (int, float)) and math.isfinite(started_at) and self._clock() >= started_at + self._lock_timeout:
+                        raise SessionRenewalInterrupted("Cloud renewal was interrupted; a normal sign-in is required before another check.")
+                    if not isinstance(started_at, (int, float)) or not math.isfinite(started_at) or time.monotonic() >= deadline:
                         raise SessionStateError("Cloud renewal is interrupted or still busy; use bootstrap_session.py --replace after the active run ends.")
                     time.sleep(0.1)
                     continue

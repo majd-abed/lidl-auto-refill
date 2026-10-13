@@ -124,9 +124,13 @@ class HttpLidlClient:
             "client_secret": tokens.client_secret, "refresh_token": tokens.refresh_token,
         }, timeout=self._timeout, client_id=tokens.client_id, client_secret=tokens.client_secret)
 
-    def _graphql(self, operation: str, query: str, variables: dict[str, Any]) -> dict[str, Any]:
+    def prepare_session(self) -> None:
+        """Resolve authentication before the controller can consider a refill."""
         if self._token_store is not None:
             self._token = self._token_store.access_token(self._renew)
+
+    def _graphql(self, operation: str, query: str, variables: dict[str, Any]) -> dict[str, Any]:
+        self.prepare_session()
         if not self._token:
             raise AuthenticationExpiredError("No authenticated session is available.")
         try:

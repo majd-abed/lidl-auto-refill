@@ -3,21 +3,47 @@
 from html.parser import HTMLParser
 import json
 import math
+import os
 import re
 import time
 from urllib.parse import urljoin, urlparse
 
 import requests
 
+from config import Config, ConfigurationError
+
 from lidl_client import (
     AuthenticationExpiredError, RequestTimeoutError, ServiceUnavailableError,
     UnexpectedHTTPStatusError, UnexpectedResponseError,
 )
-from session_store import SessionTokens
+from session_store import SessionTokens, create_session_store
 
 
 TOKEN_URL = "https://api.lidl-connect.de/api/token"
 PORTAL_URL = "https://kundenkonto.lidl-connect.de/"
+
+
+def bootstrap_from_environment(config: Config, *, replace: bool = False) -> None:
+    """One normal password grant, coordinated with renewals and supplied via Secrets."""
+    username, password = os.environ.get("LIDL_USERNAME"), os.environ.get("LIDL_PASSWORD")
+    if not config.token_state_key or not username or not password:
+        raise ConfigurationError("Set LIDL_TOKEN_STATE_KEY, LIDL_USERNAME, and LIDL_PASSWORD for a normal login.")
+    client_id, client_secret = os.environ.get("LIDL_CLIENT_ID"), os.environ.get("LIDL_CLIENT_SECRET")
+    if bool(client_id) != bool(client_secret):
+        raise ConfigurationError("Set both LIDL_CLIENT_ID and LIDL_CLIENT_SECRET, or leave both unset for portal discovery.")
+    store = create_session_store(config)
+    with requests.Session() as session:
+        session.trust_env = False
+        session.mount("https://", requests.adapters.HTTPAdapter(max_retries=0))
+        if not client_id:
+            client_id, client_secret = discover_client(session, timeout=config.http_timeout_seconds)
+        def login() -> SessionTokens:
+            return request_tokens(session, {
+                "grant_type": "password", "client_id": client_id, "client_secret": client_secret,
+                "username": username.replace("+", "").replace(" ", ""), "password": password,
+                "captcha_code": "", "captcha_token": None,
+            }, timeout=config.http_timeout_seconds, client_id=client_id, client_secret=client_secret, login=True)
+        store.bootstrap(login, replace=replace)
 
 
 def request_tokens(session: requests.Session, payload: dict, *, timeout: float, client_id: str, client_secret: str, login: bool = False) -> SessionTokens:

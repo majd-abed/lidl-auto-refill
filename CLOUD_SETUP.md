@@ -56,7 +56,7 @@ $env:LIDL_TOKEN_STATE_KEY = (& .\.venv\Scripts\python.exe -c "from cryptography.
 ```
 
 Transfer the key securely to the repository secret of the same name. Supply
-`LIDL_USERNAME` and `LIDL_PASSWORD` as temporary repository secrets, then run
+`LIDL_USERNAME` and `LIDL_PASSWORD` as encrypted repository secrets, then run
 **Bootstrap cloud session** manually. This never requests a refill. A normal
 CAPTCHA/SMS challenge stops setup for user completion.
 
@@ -66,11 +66,14 @@ client configuration. This skips only the public settings fetch. The normal
 password grant and any authentication challenge still apply. These shared
 client settings are included in the encrypted session for future renewals.
 
-After success, delete the username/password repository secrets. Regular checks
-use the encrypted token pair, database URI, and encryption key. For an
-interrupted/revoked session, run bootstrap again with temporary login secrets
-and **Replace session** enabled after active jobs end. It never clears pending
-refill history.
+Retain the username/password repository secrets for bounded normal-login
+recovery. Healthy checks use the encrypted token pair. If a refresh request
+failed or a runner was interrupted, its pending marker remains committed;
+the next check makes one normal password login instead of resending the old
+refresh grant. A failed recovery or CAPTCHA/SMS challenge pauses the Supabase
+timer and reports an error. Resolve it through normal sign-in, run bootstrap
+with **Replace session** if needed, then enable the cloud timer. Recovery
+never clears or replaces pending refill history.
 
 ## Validate cloud reads
 

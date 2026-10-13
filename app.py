@@ -1,14 +1,64 @@
 """Run a single safe check; scheduling is external to this process."""
 
 import logging
+import os
 import sys
 import time
+from typing import cast
 
 from config import Config, ConfigurationError
-from lidl_client import ClientNotConfiguredError, LidlClientError, create_client, safe_error_label
+from lidl_client import ClientNotConfiguredError, LidlClient, LidlClientError, create_client, safe_error_label
+from http_client import HttpLidlClient
 from refill_logic import run_once
 from state_store import StateStoreError, create_state_store
-from session_store import SessionStateError
+from session_store import SessionRenewalInterrupted, SessionStateError
+
+
+class SessionRecoveryFailed(SessionStateError):
+    """The single normal sign-in recovery attempt could not be completed."""
+
+
+def create_client_with_recovery(config: Config, logger: logging.Logger) -> LidlClient:
+    client = create_client(config)
+    try:
+        if config.client_mode == "http":
+            cast(HttpLidlClient, client).prepare_session()
+    except SessionRenewalInterrupted:
+        client.close()
+        if config.client_mode != "http" or not os.environ.get("LIDL_USERNAME") or not os.environ.get("LIDL_PASSWORD"):
+            raise SessionRecoveryFailed("Interrupted renewal requires normal login credentials in Secrets.") from None
+        from authentication import bootstrap_from_environment
+        logger.warning("Previous token renewal was interrupted; attempting one normal sign-in without replaying the refresh request.")
+        try:
+            bootstrap_from_environment(config, replace=True)
+            client = create_client(config)
+            cast(HttpLidlClient, client).prepare_session()
+        except Exception as error:
+            client.close()
+            label = safe_error_label(error) if isinstance(error, LidlClientError) else type(error).__name__
+            raise SessionRecoveryFailed("Normal sign-in recovery failed (" + label + "). Complete normal sign-in before resuming.") from None
+        logger.info("Session recovered through normal sign-in; continuing the allowance check.")
+    except Exception:
+        client.close()
+        raise
+    return client
+
+
+def pause_after_failed_recovery(config: Config | None, logger: logging.Logger) -> None:
+    if config is None or config.state_backend != "postgres" or os.environ.get("CLOUD_SCHEDULED_CHECK") != "true":
+        return
+    from cloud_scheduler import pause
+    from postgres_store import _Postgres
+    try:
+        store = _Postgres(config.database_url, config.state_account_key, config.database_ca_cert)
+        with store._database() as connection, connection.transaction():
+            connection.execute("SET LOCAL statement_timeout = '20s'")
+            connection.execute("SET LOCAL lock_timeout = '10s'")
+            connection.execute("SELECT pg_advisory_xact_lock(1818846316, 1)")
+            pause(connection)
+        logger.error("Automatic timer paused after failed sign-in recovery. Resolve the session, then enable the cloud timer to resume.")
+    except StateStoreError:
+        logger.error("Could not pause the automatic timer. Pause it in Supabase Cron before retrying sign-in.")
 
 
 def configure_logging() -> None:
@@ -26,9 +76,10 @@ def main() -> int:
         logger.error("Python 3.12 or newer is required.")
         return 1
     client = None
+    config = None
     try:
         config = Config.from_env()
-        client = create_client(config)
+        client = create_client_with_recovery(config, logger)
         if config.client_mode == "mock":
             logger.warning("MOCK mode: no Lidl account is contacted; all allowance/refill results are simulated.")
         result = run_once(client, config, create_state_store(config))
@@ -38,6 +89,8 @@ def main() -> int:
         return 1
     except SessionStateError as error:
         logger.error("Session unavailable: %s No refill requested.", error)
+        if isinstance(error, SessionRecoveryFailed):
+            pause_after_failed_recovery(config, logger)
         return 1
     except LidlClientError as error:
         logger.error("Allowance retrieval failed (%s); no refill requested.", safe_error_label(error))
