@@ -251,7 +251,7 @@ requires investigation; rerunning does not submit another refill.
 
 ## Validation
 
-- [194 tests passed in GitHub Actions](https://github.com/majd-abed/lidl-auto-refill/actions/runs/38373405425), covering parsing, SQLite/PostgreSQL claims and renewal,
+- [279 tests passed in GitHub Actions](https://github.com/majd-abed/lidl-auto-refill/actions/runs/38793404683), covering parsing, SQLite/PostgreSQL claims and renewal,
   committed markers surviving process crashes, encryption/key errors,
   HTTP/GraphQL/timeouts, and HTTP 500 after an applied refill.
 - An authenticated `CLIENT_MODE=http`, `DRY_RUN=true` execution on 9 October
@@ -280,6 +280,15 @@ requires investigation; rerunning does not submit another refill.
   failed recovery pauses the timer and preserves refill safety history.
   The resumed [automatic check](https://github.com/majd-abed/lidl-auto-refill/actions/runs/38373781620)
   at 11:05 Paris time succeeded, reading 0.670 GB with live refill mode enabled.
+- The 14 October failure was caused by allowance dates preceding tariff renewal.
+  Final-day checks now require matching active tariff metadata and verified
+  German timezone boundaries; older snapshots wait without submitting a refill.
+  Tests cover both DST transitions, wrong offsets, and pending-refill preservation.
+  A [hosted read-only check](https://github.com/majd-abed/lidl-auto-refill/actions/runs/38793558216)
+  on 15 October read 24.060 GB and completed successfully without a mutation.
+  The resumed [automatic check](https://github.com/majd-abed/lidl-auto-refill/actions/runs/38793715892)
+  at 21:25 Paris time succeeded, reading 24.010 GB with live refill mode enabled.
+  No refill was requested because the balance exceeded the 0.300 GB threshold.
 
 ## Cloud and GitHub Actions
 
