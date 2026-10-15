@@ -7,7 +7,7 @@ import time
 from typing import Callable
 
 from config import Config
-from lidl_client import LidlClient, LidlClientError, UnexpectedResponseError, safe_error_label
+from lidl_client import AllowancePeriodExpiredError, LidlClient, LidlClientError, UnexpectedResponseError, safe_error_label
 from state_store import RefillStateStore
 
 
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True, slots=True)
 class RunResult:
     status: str
-    remaining_gb: float
+    remaining_gb: float | None
     after_gb: float | None = None
 
     @property
@@ -44,7 +44,14 @@ def run_once(
 ) -> RunResult:
     # Snapshot state before reading so an old allowance cannot confirm a newer claim.
     previous = state.get()
-    remaining = _read_remaining(client)
+    try:
+        remaining = _read_remaining(client)
+    except AllowancePeriodExpiredError:
+        logger.warning("Lidl reports an expired data period; waiting for a current allowance snapshot. No refill requested.")
+        if previous is not None and previous.status == "pending":
+            logger.warning("An earlier refill remains unverified; retaining its pending state.")
+            return RunResult("pending", None)
+        return RunResult("waiting_period", None)
     logger.info("Remaining allowance: %.3f GB", remaining)
 
     if previous is not None and previous.status == "pending":

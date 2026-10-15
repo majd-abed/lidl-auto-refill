@@ -2,6 +2,7 @@
 
 import logging
 import os
+from pathlib import Path
 import sys
 import time
 from typing import cast
@@ -16,6 +17,19 @@ from session_store import SessionRenewalInterrupted, SessionStateError
 
 class SessionRecoveryFailed(SessionStateError):
     """The single normal sign-in recovery attempt could not be completed."""
+
+
+def write_period_waiting_summary(logger: logging.Logger, *, pending: bool) -> None:
+    target = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not target:
+        return
+    text = "### Waiting for current allowance data\n\nLidl reports only expired data buckets. No current GB balance was assumed and no refill was requested.\n\n"
+    text += "An earlier refill is still unverified and remains blocked.\n" if pending else "While the timer is enabled, the next five-minute check will try again automatically.\n"
+    try:
+        with Path(target).open("a", encoding="utf-8") as summary:
+            summary.write(text)
+    except OSError:
+        logger.warning("Could not write the workflow summary; the period status is available in the log.")
 
 
 def create_client_with_recovery(config: Config, logger: logging.Logger) -> LidlClient:
@@ -83,6 +97,8 @@ def main() -> int:
         if config.client_mode == "mock":
             logger.warning("MOCK mode: no Lidl account is contacted; all allowance/refill results are simulated.")
         result = run_once(client, config, create_state_store(config))
+        if result.remaining_gb is None:
+            write_period_waiting_summary(logger, pending=result.status == "pending")
         return result.exit_code
     except (ConfigurationError, StateStoreError, ClientNotConfiguredError) as error:
         logger.error("%s", error)

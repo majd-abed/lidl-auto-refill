@@ -37,12 +37,6 @@ jobs:
               data = client._graphql('consumptions', CONSUMPTIONS_QUERY, {})
               captured = datetime.now(timezone.utc)
               report = {'captured_at': captured.isoformat(), 'buckets': []}
-              try:
-                  report['remaining_gb'] = parse_api_allowance(data, now=captured)
-              except UnexpectedResponseError as error:
-                  tree = ast.parse(Path('http_client.py').read_text())
-                  fixed = {node.args[0].value for node in ast.walk(tree) if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'UnexpectedResponseError' and node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str)}
-                  report['rejection'] = str(error) if str(error) in fixed else type(error).__name__
               rows = data.get('consumptions', {}).get('consumptionsForUnit', [])
               for row in rows[:20] if isinstance(rows, list) else []:
                   if not isinstance(row, dict):
@@ -59,6 +53,7 @@ jobs:
                   except (ValueError, TypeError, AttributeError):
                       item['expiration_invalid'] = True
                   report['buckets'].append(item)
+              tariff_data = None
               try:
                   tariff_data = client._graphql('bookedTariff', 'query bookedTariff { tariffs { bookedTariff { statusKey tariffState isSuspendedActive isPendingTariff renewContractDate possibleChangingDate changeTariffDate terminationDate __typename } __typename } }', {})
                   tariff = tariff_data.get('tariffs', {}).get('bookedTariff', {})
@@ -77,6 +72,12 @@ jobs:
                   report['tariff_status'] = status
               except Exception as error:
                   report['tariff_inspection_error'] = type(error).__name__
+              try:
+                  report['remaining_gb'] = parse_api_allowance(data, tariff_context=tariff_data)
+              except UnexpectedResponseError as error:
+                  tree = ast.parse(Path('http_client.py').read_text())
+                  fixed = {node.args[0].value for node in ast.walk(tree) if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in {'UnexpectedResponseError', 'AllowancePeriodExpiredError'} and node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str)}
+                  report['rejection'] = str(error) if str(error) in fixed else type(error).__name__
               try:
                   balance_data = client._graphql('balanceInfo', 'query balanceInfo { currentCustomer { balance __typename } }', {})
                   balance = balance_data.get('currentCustomer', {}).get('balance')

@@ -1,5 +1,6 @@
 """Client contract, display parser, simulations, and client selection."""
 
+from datetime import datetime
 import math
 import re
 from typing import Protocol
@@ -27,6 +28,14 @@ class RequestTimeoutError(LidlClientError):
 
 class UnexpectedResponseError(LidlClientError):
     pass
+
+
+class AllowancePeriodExpiredError(UnexpectedResponseError):
+    """An otherwise valid snapshot contains only expired allowance buckets."""
+
+    def __init__(self, message: str, *, last_day_expiry: datetime | None = None) -> None:
+        self.last_day_expiry = last_day_expiry
+        super().__init__(message)
 
 
 class RefillRequestError(LidlClientError):

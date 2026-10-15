@@ -184,8 +184,22 @@ negative values, infinity, and unexpected text. **1 GB = 1024 MB** matches the
 requested `200 MB ≈ 0.195 GB` example. The captured API instead returns numeric
 GB values. Its separate parser accepts only the observed GB format, sums the
 aggregate `DATA` and `REFILLABLE_DATA` buckets, validates numbers and aware ISO
-expiry timestamps, and rejects expired/duplicate/unknown data buckets. Nested
-bundle rows are not counted again. An API unit change requires a fresh capture.
+expiry timestamps, and rejects duplicate/unknown data buckets. Nested bundle
+rows are not counted again. An API unit change requires a fresh capture.
+
+The two captured tariff cycles report a midnight allowance date one calendar
+day before tariff renewal. For that final day only, a read of the captured
+`bookedTariff` operation must confirm status `CDL`, no suspension or pending
+tariff, and renewal at the immediately following German midnight. All aggregate
+data rows must share the same date and offset, both dates must match
+`Europe/Berlin`, and the renewal instant must still be in the future. This is a
+bounded interpretation of the observed responses, not a general grace period.
+
+Otherwise, a fully validated snapshot containing only expired data buckets
+produces a waiting status without assuming a current GB balance or requesting
+a refill. The next enabled timer check tries again. Malformed or mixed
+current/expired buckets still fail, and an earlier unverified refill remains
+blocked with exit code 2. Waiting after sending a refill never clears its claim.
 
 ## Refill safeguards
 
@@ -229,7 +243,8 @@ logging response contents. The session does not load implicit `.netrc`
 credentials or proxy configuration. Timeout behavior follows
 [Requests documentation](https://requests.readthedocs.io/en/latest/user/quickstart/#timeouts).
 
-Exit codes: `0` for normal no-action/dry-run/cooldown/confirmed outcomes, `1`
+Exit codes: `0` for normal no-action/dry-run/cooldown/confirmed or expired-period
+waiting outcomes, `1`
 for configuration, initial read, state, or unexpected failures, and `2` when a
 refill is uncertain or an earlier request remains pending. An exit code 2
 requires investigation; rerunning does not submit another refill.
@@ -279,6 +294,9 @@ read-only cloud validation, and controlled activation of the schedule.
   disabled unless the manual input or scheduled `REFILL_ENABLED=true` is set.
 - `cloud-timer.yml` prepares, enables, pauses, or inspects the Supabase timer.
   New timers are inactive until explicitly enabled with a scoped dispatch token.
+- `inspect-allowance.yml` performs manual, read-only diagnosis of aggregate
+  allowance dates and technical tariff status. It cannot activate a refill;
+  full account responses and monetary amounts are excluded from its output.
 
 Hosted jobs use `STATE_BACKEND=postgres`, a stable `STATE_ACCOUNT_KEY`, and
 repository secrets for `DATABASE_URL` and `LIDL_TOKEN_STATE_KEY`. The newest

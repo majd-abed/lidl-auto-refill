@@ -1,8 +1,10 @@
 """HTTP operations captured from the portal and the user's HAR, 2026-10-09."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+import logging
 import math
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
 
@@ -10,10 +12,13 @@ from authentication import request_tokens
 from session_store import RenewableSessionStore, SessionTokens
 
 from lidl_client import (
-    AuthenticationExpiredError, RefillRequestError, RequestTimeoutError,
-    ServiceUnavailableError, UnexpectedHTTPStatusError, UnexpectedResponseError,
+    AllowancePeriodExpiredError, AuthenticationExpiredError, LidlClientError,
+    RefillRequestError, RequestTimeoutError, ServiceUnavailableError,
+    UnexpectedHTTPStatusError, UnexpectedResponseError, safe_error_label,
 )
 
+
+logger = logging.getLogger(__name__)
 
 GRAPHQL_URL = "https://api.lidl-connect.de/api/graphql"
 # This identifier was captured from the action the user confirmed was free +1 GB.
@@ -65,8 +70,71 @@ REFILL_MUTATION = """mutation bookTariffOptionsDirect($bookTariffoptionsDirectIn
 """
 
 
-def parse_api_allowance(data: object, *, now: datetime | None = None) -> float:
-    """Sum active aggregate DATA/REFILLABLE_DATA rows without counting nested copies."""
+BOOKED_TARIFF_QUERY = """query bookedTariff {
+  tariffs {
+    bookedTariff {
+      statusKey
+      isSuspendedActive
+      isPendingTariff
+      renewContractDate
+    }
+  }
+}
+"""
+
+
+def _german_midnight(value: datetime) -> bool:
+    if value.utcoffset() not in {timedelta(hours=1), timedelta(hours=2)} or any((value.hour, value.minute, value.second, value.microsecond)):
+        return False
+    try:
+        berlin = value.astimezone(ZoneInfo("Europe/Berlin"))
+    except ZoneInfoNotFoundError:
+        return False
+    return (
+        berlin.replace(tzinfo=None) == value.replace(tzinfo=None)
+        and berlin.utcoffset() == value.utcoffset()
+    )
+
+
+def _common_midnight_expiry(expirations: list[datetime]) -> datetime | None:
+    first = expirations[0]
+    if not _german_midnight(first):
+        return None
+    if any(
+        value.date() != first.date() or value.utcoffset() != first.utcoffset() or not _german_midnight(value)
+        for value in expirations[1:]
+    ):
+        return None
+    return first
+
+
+def _tariff_covers_last_day(expiry: datetime, now: datetime, context: object) -> bool:
+    if not isinstance(context, dict) or not isinstance(context.get("tariffs"), dict):
+        return False
+    tariff = context["tariffs"].get("bookedTariff")
+    if (
+        not isinstance(tariff, dict)
+        or tariff.get("statusKey") != "CDL"
+        or tariff.get("isSuspendedActive") is not False
+        or tariff.get("isPendingTariff") is not False
+    ):
+        return False
+    raw_renewal = tariff.get("renewContractDate")
+    if not isinstance(raw_renewal, str):
+        return False
+    try:
+        renewal = datetime.fromisoformat(raw_renewal.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return (
+        _german_midnight(renewal)
+        and renewal.date() == expiry.date() + timedelta(days=1)
+        and expiry <= now < renewal
+    )
+
+
+def parse_api_allowance(data: object, *, now: datetime | None = None, tariff_context: object = None) -> float:
+    """Sum aggregate buckets; require matching tariff metadata for an inclusive final date."""
     if not isinstance(data, dict) or not isinstance(data.get("consumptions"), dict):
         raise UnexpectedResponseError("Missing consumptions object.")
     rows = data["consumptions"].get("consumptionsForUnit")
@@ -75,6 +143,8 @@ def parse_api_allowance(data: object, *, now: datetime | None = None) -> float:
     current_time = now or datetime.now(timezone.utc)
     seen = set()
     total = 0.0
+    expired_count = 0
+    expirations: list[datetime] = []
     for row in rows:
         if not isinstance(row, dict) or not isinstance(row.get("type"), str):
             raise UnexpectedResponseError("Invalid allowance row.")
@@ -101,11 +171,21 @@ def parse_api_allowance(data: object, *, now: datetime | None = None) -> float:
             expiry = datetime.fromisoformat(expiration.replace("Z", "+00:00"))
         except ValueError:
             raise UnexpectedResponseError("Invalid data bucket expiration format.") from None
-        if expiry.tzinfo is None or expiry <= current_time:
+        if expiry.tzinfo is None:
             raise UnexpectedResponseError("Expired or ambiguous data bucket; request a fresh allowance snapshot.")
+        expirations.append(expiry)
+        if expiry <= current_time:
+            expired_count += 1
         total += left
     if not seen or not math.isfinite(total):
         raise UnexpectedResponseError("No valid data allowance found.")
+    if expired_count == len(seen):
+        last_day_expiry = _common_midnight_expiry(expirations)
+        if last_day_expiry is not None and _tariff_covers_last_day(last_day_expiry, current_time, tariff_context):
+            return total
+        raise AllowancePeriodExpiredError("All reported allowance buckets have expired; waiting for an active period.", last_day_expiry=last_day_expiry)
+    if expired_count:
+        raise UnexpectedResponseError("Expired or ambiguous data bucket; request a fresh allowance snapshot.")
     return total
 
 
@@ -171,7 +251,21 @@ class HttpLidlClient:
             self._token = self._token_store.access_token(self._renew, rejected_token=self._token)
             # Only this read may be retried. Refill mutations are never replayed.
             data = self._graphql("consumptions", CONSUMPTIONS_QUERY, {})
-        return parse_api_allowance(data)
+        now = datetime.now(timezone.utc)
+        try:
+            return parse_api_allowance(data, now=now)
+        except AllowancePeriodExpiredError as error:
+            expiry = error.last_day_expiry
+            # This only bounds the extra read; matching renewal metadata is
+            # still required, including on a 23- or 25-hour local calendar day.
+            if expiry is None or not timedelta(0) <= now - expiry < timedelta(hours=25):
+                raise
+            try:
+                context = self._graphql("bookedTariff", BOOKED_TARIFF_QUERY, {})
+            except LidlClientError as context_error:
+                logger.warning("Tariff status unavailable (%s); waiting for current allowance data.", safe_error_label(context_error))
+                raise error from None
+            return parse_api_allowance(data, tariff_context=context)
 
     def activate_refill(self) -> None:
         data = self._graphql("bookTariffOptionsDirect", REFILL_MUTATION, {
