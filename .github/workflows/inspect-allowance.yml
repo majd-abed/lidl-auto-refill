@@ -24,7 +24,7 @@ jobs:
       - name: Inspect only aggregate allowance fields without activating a refill
         run: |
           python - <<'PY'
-          import ast, json, logging, math
+          import ast, json, logging, math, re
           from datetime import datetime, timezone
           from pathlib import Path
           from app import create_client_with_recovery
@@ -59,6 +59,30 @@ jobs:
                   except (ValueError, TypeError, AttributeError):
                       item['expiration_invalid'] = True
                   report['buckets'].append(item)
+              try:
+                  tariff_data = client._graphql('bookedTariff', 'query bookedTariff { tariffs { bookedTariff { statusKey tariffState isSuspendedActive isPendingTariff renewContractDate possibleChangingDate changeTariffDate terminationDate __typename } __typename } }', {})
+                  tariff = tariff_data.get('tariffs', {}).get('bookedTariff', {})
+                  status = {}
+                  for key in ('statusKey', 'tariffState'):
+                      value = tariff.get(key)
+                      status[key] = value if isinstance(value, str) and re.fullmatch('[A-Za-z0-9_-]{1,60}', value) else None
+                  for key in ('isSuspendedActive', 'isPendingTariff'):
+                      value = tariff.get(key)
+                      status[key] = value if type(value) is bool else None
+                  for key in ('renewContractDate', 'possibleChangingDate', 'changeTariffDate', 'terminationDate'):
+                      try:
+                          status[key] = datetime.fromisoformat(tariff.get(key, '').replace('Z', '+00:00')).isoformat()
+                      except (ValueError, TypeError, AttributeError):
+                          status[key] = None
+                  report['tariff_status'] = status
+              except Exception as error:
+                  report['tariff_inspection_error'] = type(error).__name__
+              try:
+                  balance_data = client._graphql('balanceInfo', 'query balanceInfo { currentCustomer { balance __typename } }', {})
+                  balance = balance_data.get('currentCustomer', {}).get('balance')
+                  report['credit_positive'] = balance > 0 if type(balance) in {int, float} and math.isfinite(balance) else None
+              except Exception as error:
+                  report['credit_inspection_error'] = type(error).__name__
               print('Allowance diagnostics: ' + json.dumps(report))
           except Exception as error:
               print('Allowance inspection stopped: ' + type(error).__name__)
